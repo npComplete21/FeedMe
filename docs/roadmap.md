@@ -15,7 +15,7 @@ Goal: prove the ingest → parse → store → match loop works, running only on
 - [x] 0.2 DB models + migrations — `User`, `Recipe`, `Ingredient`, `RecipeIngredient` (see [ADR-0001](adr/0001-postgres-over-nosql.md), [ADR-0002](adr/0002-user-id-scoping-from-day-one.md))
 - [x] 0.3 YouTube ingestion — URL in, raw transcript/caption out (via `yt-dlp`)
 - [x] 0.4 Manual caption ingestion — Instagram path, paste caption text + URL (see [ADR-0006](adr/0006-raw-source-staging-table.md))
-- [ ] 0.5 LLM parsing — raw text in, structured `Recipe` JSON out, validated against a Pydantic schema
+- [x] 0.5 LLM parsing — raw text in, structured `Recipe` JSON out, validated against a Pydantic schema (see [ADR-0007](adr/0007-llm-structured-extraction.md))
 - [ ] 0.6 Persistence — wire 0.5's output into 0.2's models, scoped by `user_id`
 - [ ] 0.7 Ingredient matching — pure function, pantry list in, ranked recipes out
 - [ ] 0.8 API layer — `POST /recipes/ingest`, `GET /recipes`, `POST /match` (see [ADR-0003](adr/0003-fastapi-over-django.md))
