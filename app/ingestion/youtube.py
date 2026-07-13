@@ -5,6 +5,9 @@ from dataclasses import dataclass
 
 import httpx
 import yt_dlp
+from sqlalchemy.orm import Session
+
+from app.models import RawSource
 
 _TIMESTAMP_LINE = re.compile(r"^\d{2}:\d{2}:\d{2}[.,]\d{3}\s*-->")
 _TAG = re.compile(r"<[^>]+>")
@@ -92,3 +95,17 @@ def fetch_youtube_transcript(url: str) -> YouTubeSource:
         thumbnail_url=info.get("thumbnail"),
         transcript_text=vtt_to_text(response.text),
     )
+
+
+def save_youtube_source(session: Session, user_id: int, source: YouTubeSource) -> RawSource:
+    raw_source = RawSource(
+        user_id=user_id,
+        source_url=source.source_url,
+        source_platform="youtube",
+        raw_text=source.transcript_text,
+        title=source.title,
+        thumbnail_url=source.thumbnail_url,
+    )
+    session.add(raw_source)
+    session.flush()
+    return raw_source
