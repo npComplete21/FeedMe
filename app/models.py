@@ -44,6 +44,9 @@ class Recipe(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    raw_source_id: Mapped[int | None] = mapped_column(
+        ForeignKey("raw_sources.id"), nullable=True
+    )
     source_url: Mapped[str] = mapped_column(String)
     source_platform: Mapped[str] = mapped_column(String)
     title: Mapped[str] = mapped_column(String)
@@ -52,6 +55,7 @@ class Recipe(Base):
     created_at: Mapped[datetime] = mapped_column(_TIMESTAMP, server_default=func.now())
 
     user: Mapped["User"] = relationship(back_populates="recipes")
+    raw_source: Mapped["RawSource | None"] = relationship()
     ingredients: Mapped[list["RecipeIngredient"]] = relationship(
         back_populates="recipe", cascade="all, delete-orphan"
     )

@@ -34,3 +34,8 @@ step (0.5) will read a `RawSource` row and produce a `Recipe`.
 - Cost: one extra table and an extra migration up front, and 0.5/0.6 will need to decide how a
   `RawSource` links to the `Recipe` it produces (a FK from `Recipe` back to its `RawSource`, or
   no link at all if we don't need traceability) — deferred until we build that step
+
+**Resolved in 0.6:** `Recipe.raw_source_id` is a nullable FK back to `raw_sources.id`
+(migration `0003`), so a `Recipe` traces back to the exact `RawSource` it was parsed from.
+Nullable rather than required, since a future manual "add a recipe by hand" path (no LLM
+parsing involved) wouldn't have a `RawSource` to point at.
