@@ -19,9 +19,14 @@ Goal: prove the ingest → parse → store → match loop works, running only on
 - [x] 0.6 Persistence — wire 0.5's output into 0.2's models, scoped by `user_id` (resolves [ADR-0006](adr/0006-raw-source-staging-table.md)'s deferred `raw_source_id` link)
 - [x] 0.7 Ingredient matching — pure function, pantry list in, ranked recipes out
 - [x] 0.8 API layer — `POST /recipes/ingest`, `GET /recipes`, `POST /match` (see [ADR-0003](adr/0003-fastapi-over-django.md))
-- [ ] 0.9 Minimal UI — Streamlit, thin layer over the API (see [ADR-0004](adr/0004-streamlit-for-phase-0-ui.md))
+- [x] 0.9 Minimal UI — Streamlit, thin layer over the API (see [ADR-0004](adr/0004-streamlit-for-phase-0-ui.md))
 
 Each step ships with its own tests before moving to the next (see testing approach below).
+
+**Phase 0 complete.** Full loop verified live: paste a caption → parse (blocked here only by no
+`ANTHROPIC_API_KEY` in the dev sandbox, and confirmed the failure surfaces as a clean UI error
+rather than a crash) → browse recipes → match against a pantry, all exercised through the actual
+running FastAPI + Streamlit servers against real Postgres, not just the test suite.
 
 ## Phase 1 — Make it good
 
