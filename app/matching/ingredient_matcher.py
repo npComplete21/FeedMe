@@ -1,8 +1,6 @@
 from dataclasses import dataclass
 
-
-def _normalize(name: str) -> str:
-    return name.strip().lower()
+from app.ingredients.normalization import normalize_ingredient_name
 
 
 @dataclass
@@ -31,14 +29,14 @@ def match_recipes(pantry: list[str], recipes: list[MatchableRecipe]) -> list[Rec
     A recipe with zero ingredients has a match_ratio of 0.0 rather than a vacuous
     1.0 - it carries no matching signal, so it should rank last, not first.
     """
-    pantry_set = {_normalize(item) for item in pantry}
+    pantry_set = {normalize_ingredient_name(item) for item in pantry}
 
     matches = []
     for recipe in recipes:
         matched = []
         missing = []
         for ingredient in recipe.ingredients:
-            if _normalize(ingredient.name) in pantry_set:
+            if normalize_ingredient_name(ingredient.name) in pantry_set:
                 matched.append(ingredient.name)
             else:
                 missing.append(ingredient.name)

@@ -30,10 +30,10 @@ running FastAPI + Streamlit servers against real Postgres, not just the test sui
 
 ## Phase 1 — Make it good
 
-- [ ] LLM chat over your recipes ("I have chicken, rice, broccoli — what should I make?")
-- [ ] Ingredient synonym handling (e.g. "scallion" == "green onion")
-- [ ] Tags/filters — cuisine, meal type, cook time
-- [ ] In-app recipe editing to fix bad LLM parses
+- [x] 1.1 Ingredient synonym handling — shared `normalize_ingredient_name()`, alias map + parenthetical stripping (see [ADR-0008](adr/0008-ingredient-normalization-alias-map.md))
+- [ ] 1.2 Tags/filters — cuisine, meal type, cook time
+- [ ] 1.3 In-app recipe editing to fix bad LLM parses
+- [ ] 1.4 LLM chat over your recipes ("I have chicken, rice, broccoli — what should I make?")
 
 ## Phase 2 — Productionize
 

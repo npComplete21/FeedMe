@@ -1,16 +1,13 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.ingredients.normalization import normalize_ingredient_name
 from app.models import Ingredient, RawSource, Recipe, RecipeIngredient
 from app.parsing.recipe_parser import ParsedRecipe
 
 
-def _normalize_ingredient_name(name: str) -> str:
-    return name.strip().lower()
-
-
 def _get_or_create_ingredient(session: Session, name: str) -> Ingredient:
-    normalized = _normalize_ingredient_name(name)
+    normalized = normalize_ingredient_name(name)
     ingredient = session.scalars(
         select(Ingredient).where(Ingredient.name == normalized)
     ).first()

@@ -71,6 +71,17 @@ def test_ties_broken_alphabetically_by_title():
     assert [r.recipe.title for r in results] == ["Apple Pie", "Zucchini Bread"]
 
 
+def test_synonyms_and_prep_notes_match_a_plain_pantry_item():
+    # the real bug: a recipe ingredient phrased as "onion (for cooking)" should
+    # still match a pantry that just says "onion"
+    recipe = _recipe(1, "Bibimbap", "onion (for cooking)", "green onion")
+
+    [result] = match_recipes(["onion", "scallion"], [recipe])
+
+    assert result.match_ratio == 1.0
+    assert result.missing_ingredients == []
+
+
 def test_recipe_with_no_ingredients_ranks_below_zero_ratio_recipe_with_real_ingredients():
     empty = _recipe(1, "Empty Recipe")
     unmatched = _recipe(2, "Unmatched Recipe", "durian")

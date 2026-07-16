@@ -88,3 +88,33 @@ def test_persist_recipe_normalizes_and_dedupes_ingredient_names(db_session, raw_
 
     rice_rows = db_session.scalars(select(Ingredient).where(Ingredient.name == "rice")).all()
     assert len(rice_rows) == 1
+
+
+def test_persist_recipe_dedupes_parenthetical_and_plural_variants(db_session, raw_source, user):
+    # the exact real-world bug: "onions" and "onion (for cooking)" from two
+    # different recipes should land as the same Ingredient row
+    persist_recipe(
+        db_session,
+        raw_source,
+        _parsed_recipe(ingredients=[ParsedIngredient(name="onions", raw_text="onions")]),
+    )
+    other_source = RawSource(
+        user_id=user.id,
+        source_url="https://youtube.com/watch?v=ghi",
+        source_platform="youtube",
+        raw_text="bibimbap",
+    )
+    db_session.add(other_source)
+    db_session.flush()
+
+    persist_recipe(
+        db_session,
+        other_source,
+        _parsed_recipe(
+            title="Bibimbap",
+            ingredients=[ParsedIngredient(name="onion (for cooking)", raw_text="onion")],
+        ),
+    )
+
+    onion_rows = db_session.scalars(select(Ingredient).where(Ingredient.name == "onion")).all()
+    assert len(onion_rows) == 1
