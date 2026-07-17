@@ -17,3 +17,10 @@ bullet point six months from now).
   `"onion (for blender)"` duplicates from live testing). Needs a one-off script: find `Ingredient`
   rows whose normalized names collide, repoint their `RecipeIngredient` rows to one canonical row,
   delete the duplicates. *Noted: 2026-07-16, during Phase 1.1.*
+
+- [ ] **Watch for drift between the UI's hardcoded `CUISINES`/`MEAL_TYPES` lists and the backend's
+  `Cuisine`/`MealType` Literal types.** Deliberately duplicated rather than imported (see
+  [ADR-0009](adr/0009-tags-closed-vocabulary.md)) to keep the UI a pure HTTP client with no backend
+  imports. If the allowed values change often enough that this becomes annoying, consider a shared
+  constants module both sides can depend on without pulling in `anthropic`/`sqlalchemy`.
+  *Noted: 2026-07-17, during Phase 1.2.*

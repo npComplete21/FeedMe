@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -39,6 +39,9 @@ def _recipe_to_response(recipe: Recipe) -> RecipeResponse:
             IngredientResponse(name=ri.ingredient.name, quantity=ri.quantity)
             for ri in recipe.ingredients
         ],
+        cuisine=recipe.cuisine,
+        meal_type=recipe.meal_type,
+        cook_time_minutes=recipe.cook_time_minutes,
         created_at=recipe.created_at,
     )
 
@@ -79,12 +82,21 @@ def ingest_recipe(
 
 @router.get("/recipes", response_model=list[RecipeResponse])
 def list_recipes(
+    cuisine: str | None = Query(None),
+    meal_type: str | None = Query(None),
+    max_cook_time_minutes: int | None = Query(None, ge=0),
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
 ) -> list[RecipeResponse]:
-    recipes = db.scalars(
-        select(Recipe).where(Recipe.user_id == user_id).order_by(Recipe.created_at.desc())
-    ).all()
+    query = select(Recipe).where(Recipe.user_id == user_id)
+    if cuisine is not None:
+        query = query.where(Recipe.cuisine == cuisine)
+    if meal_type is not None:
+        query = query.where(Recipe.meal_type == meal_type)
+    if max_cook_time_minutes is not None:
+        query = query.where(Recipe.cook_time_minutes <= max_cook_time_minutes)
+
+    recipes = db.scalars(query.order_by(Recipe.created_at.desc())).all()
     return [_recipe_to_response(r) for r in recipes]
 
 

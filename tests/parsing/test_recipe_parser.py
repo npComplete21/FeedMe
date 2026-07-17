@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+from pydantic import ValidationError
 
 from app.parsing import recipe_parser
 from app.parsing.recipe_parser import ParsedIngredient, ParsedRecipe, RecipeParseError, parse_recipe
@@ -48,6 +49,31 @@ def test_parse_recipe_calls_model_with_expected_shape():
     assert kwargs["model"] == recipe_parser.MODEL
     assert kwargs["output_format"] is ParsedRecipe
     assert kwargs["messages"] == [{"role": "user", "content": CAPTION}]
+
+
+def test_parsed_recipe_accepts_tags():
+    recipe = ParsedRecipe(
+        title="Bibimbap",
+        ingredients=[],
+        steps=[],
+        cuisine="korean",
+        meal_type="dinner",
+        cook_time_minutes=25,
+    )
+
+    assert recipe.cuisine == "korean"
+    assert recipe.meal_type == "dinner"
+    assert recipe.cook_time_minutes == 25
+
+
+def test_parsed_recipe_rejects_cuisine_outside_the_allowed_set():
+    with pytest.raises(ValidationError):
+        ParsedRecipe(title="X", ingredients=[], steps=[], cuisine="klingon")
+
+
+def test_parsed_recipe_rejects_meal_type_outside_the_allowed_set():
+    with pytest.raises(ValidationError):
+        ParsedRecipe(title="X", ingredients=[], steps=[], meal_type="elevenses")
 
 
 def test_parse_recipe_raises_on_refusal():

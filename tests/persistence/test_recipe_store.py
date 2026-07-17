@@ -53,6 +53,26 @@ def test_persist_recipe_creates_recipe_linked_to_raw_source(db_session, raw_sour
     assert recipe.raw_source_text == raw_source.raw_text
 
 
+def test_persist_recipe_stores_tags(db_session, raw_source):
+    recipe = persist_recipe(
+        db_session,
+        raw_source,
+        _parsed_recipe(cuisine="korean", meal_type="dinner", cook_time_minutes=25),
+    )
+
+    assert recipe.cuisine == "korean"
+    assert recipe.meal_type == "dinner"
+    assert recipe.cook_time_minutes == 25
+
+
+def test_persist_recipe_tags_default_to_none(db_session, raw_source):
+    recipe = persist_recipe(db_session, raw_source, _parsed_recipe())
+
+    assert recipe.cuisine is None
+    assert recipe.meal_type is None
+    assert recipe.cook_time_minutes is None
+
+
 def test_persist_recipe_creates_recipe_ingredient_links(db_session, raw_source):
     recipe = persist_recipe(db_session, raw_source, _parsed_recipe())
 

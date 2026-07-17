@@ -26,6 +26,9 @@ def persist_recipe(session: Session, raw_source: RawSource, parsed: ParsedRecipe
         source_platform=raw_source.source_platform,
         title=parsed.title,
         steps=parsed.steps,
+        cuisine=parsed.cuisine,
+        meal_type=parsed.meal_type,
+        cook_time_minutes=parsed.cook_time_minutes,
         raw_source_text=raw_source.raw_text,
     )
     session.add(recipe)

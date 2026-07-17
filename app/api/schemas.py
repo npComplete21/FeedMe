@@ -22,6 +22,9 @@ class RecipeResponse(BaseModel):
     source_platform: str
     steps: list[str]
     ingredients: list[IngredientResponse]
+    cuisine: str | None = None
+    meal_type: str | None = None
+    cook_time_minutes: int | None = None
     created_at: datetime
 
 

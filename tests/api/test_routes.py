@@ -2,13 +2,24 @@ from app.api.deps import get_current_user_id
 from app.models import Ingredient, Recipe, RecipeIngredient
 
 
-def _make_recipe(db_session, user_id, title="Fried Rice", ingredients=None):
+def _make_recipe(
+    db_session,
+    user_id,
+    title="Fried Rice",
+    ingredients=None,
+    cuisine=None,
+    meal_type=None,
+    cook_time_minutes=None,
+):
     recipe = Recipe(
         user_id=user_id,
         source_url="https://youtube.com/watch?v=abc",
         source_platform="youtube",
         title=title,
         steps=["step"],
+        cuisine=cuisine,
+        meal_type=meal_type,
+        cook_time_minutes=cook_time_minutes,
     )
     db_session.add(recipe)
     db_session.flush()
@@ -97,6 +108,43 @@ def test_list_recipes_scoped_to_current_user(client, db_session):
     assert response.status_code == 200
     titles = {r["title"] for r in response.json()}
     assert titles == {"Recipe A", "Recipe B"}
+
+
+def test_list_recipes_filters_by_cuisine(client, db_session):
+    user_id = get_current_user_id(db_session)
+    _make_recipe(db_session, user_id, title="Bibimbap", cuisine="korean")
+    _make_recipe(db_session, user_id, title="Tacos", cuisine="mexican")
+
+    response = client.get("/recipes", params={"cuisine": "korean"})
+
+    assert response.status_code == 200
+    titles = [r["title"] for r in response.json()]
+    assert titles == ["Bibimbap"]
+
+
+def test_list_recipes_filters_by_meal_type(client, db_session):
+    user_id = get_current_user_id(db_session)
+    _make_recipe(db_session, user_id, title="Pancakes", meal_type="breakfast")
+    _make_recipe(db_session, user_id, title="Steak", meal_type="dinner")
+
+    response = client.get("/recipes", params={"meal_type": "breakfast"})
+
+    assert response.status_code == 200
+    titles = [r["title"] for r in response.json()]
+    assert titles == ["Pancakes"]
+
+
+def test_list_recipes_filters_by_max_cook_time_and_excludes_unknown(client, db_session):
+    user_id = get_current_user_id(db_session)
+    _make_recipe(db_session, user_id, title="Quick Stir Fry", cook_time_minutes=15)
+    _make_recipe(db_session, user_id, title="Slow Roast", cook_time_minutes=180)
+    _make_recipe(db_session, user_id, title="Unknown Time", cook_time_minutes=None)
+
+    response = client.get("/recipes", params={"max_cook_time_minutes": 30})
+
+    assert response.status_code == 200
+    titles = [r["title"] for r in response.json()]
+    assert titles == ["Quick Stir Fry"]
 
 
 def test_match_pantry_returns_ranked_matches(client, db_session):

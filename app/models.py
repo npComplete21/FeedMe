@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -51,6 +51,9 @@ class Recipe(Base):
     source_platform: Mapped[str] = mapped_column(String)
     title: Mapped[str] = mapped_column(String)
     steps: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    cuisine: Mapped[str | None] = mapped_column(String, nullable=True)
+    meal_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    cook_time_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     raw_source_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(_TIMESTAMP, server_default=func.now())
 
