@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from app.parsing.recipe_parser import Cuisine, MealType
+
 
 class IngestRequest(BaseModel):
     source_platform: Literal["youtube", "instagram"]
@@ -13,6 +15,20 @@ class IngestRequest(BaseModel):
 class IngredientResponse(BaseModel):
     name: str
     quantity: str | None = None
+
+
+class IngredientUpdate(BaseModel):
+    name: str
+    quantity: str | None = None
+
+
+class RecipeUpdateRequest(BaseModel):
+    title: str
+    steps: list[str]
+    cuisine: Cuisine | None = None
+    meal_type: MealType | None = None
+    cook_time_minutes: int | None = None
+    ingredients: list[IngredientUpdate]
 
 
 class RecipeResponse(BaseModel):

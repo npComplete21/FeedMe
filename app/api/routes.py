@@ -9,6 +9,7 @@ from app.api.schemas import (
     MatchRequest,
     RecipeMatchResponse,
     RecipeResponse,
+    RecipeUpdateRequest,
 )
 from app.ingestion.manual import EmptyCaptionError, EmptySourceUrlError
 from app.ingestion.pipeline import ingest_manual_caption, ingest_youtube
@@ -16,6 +17,7 @@ from app.ingestion.youtube import NoCaptionsAvailableError, YouTubeFetchError
 from app.matching.ingredient_matcher import MatchableIngredient, MatchableRecipe, match_recipes
 from app.models import Recipe
 from app.parsing.recipe_parser import RecipeParseError
+from app.persistence.recipe_store import IngredientSpec, update_recipe
 
 router = APIRouter()
 
@@ -98,6 +100,36 @@ def list_recipes(
 
     recipes = db.scalars(query.order_by(Recipe.created_at.desc())).all()
     return [_recipe_to_response(r) for r in recipes]
+
+
+@router.put("/recipes/{recipe_id}", response_model=RecipeResponse)
+def update_recipe_route(
+    recipe_id: int,
+    payload: RecipeUpdateRequest,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+) -> RecipeResponse:
+    recipe = db.scalars(
+        select(Recipe).where(Recipe.id == recipe_id, Recipe.user_id == user_id)
+    ).first()
+    if recipe is None:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+
+    recipe = update_recipe(
+        db,
+        recipe,
+        title=payload.title,
+        steps=payload.steps,
+        cuisine=payload.cuisine,
+        meal_type=payload.meal_type,
+        cook_time_minutes=payload.cook_time_minutes,
+        ingredients=[
+            IngredientSpec(name=i.name, quantity=i.quantity) for i in payload.ingredients
+        ],
+    )
+    db.commit()
+    db.refresh(recipe)
+    return _recipe_to_response(recipe)
 
 
 @router.post("/match", response_model=list[RecipeMatchResponse])

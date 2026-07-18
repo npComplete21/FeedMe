@@ -31,6 +31,33 @@ def _error_detail(exc: httpx.HTTPStatusError) -> str:
         return exc.response.text
 
 
+def _ingredients_to_text(ingredients: list[dict]) -> str:
+    lines = []
+    for ing in ingredients:
+        lines.append(f"{ing['name']}, {ing['quantity']}" if ing.get("quantity") else ing["name"])
+    return "\n".join(lines)
+
+
+def _parse_ingredients_text(text: str) -> list[dict]:
+    parsed = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if "," in line:
+            name, quantity = line.split(",", 1)
+            parsed.append({"name": name.strip(), "quantity": quantity.strip() or None})
+        else:
+            parsed.append({"name": line, "quantity": None})
+    return parsed
+
+
+def _select_index(options_with_sentinel: list[str], current_value: str | None) -> int:
+    if current_value in options_with_sentinel:
+        return options_with_sentinel.index(current_value)
+    return 0
+
+
 st.header("Add a recipe")
 source_platform = st.radio("Source", ["youtube", "instagram"], horizontal=True)
 url = st.text_input("URL")
@@ -131,3 +158,51 @@ for recipe in recipes:
         st.write("**Steps:**")
         for i, step in enumerate(recipe["steps"], 1):
             st.write(f"{i}. {step}")
+
+        with st.form(key=f"edit-{recipe['id']}"):
+            st.write("**Edit this recipe**")
+            edit_title = st.text_input("Title", value=recipe["title"])
+            edit_steps_text = st.text_area(
+                "Steps (one per line)", value="\n".join(recipe["steps"])
+            )
+            edit_ingredients_text = st.text_area(
+                "Ingredients (one per line, as 'name, quantity')",
+                value=_ingredients_to_text(recipe["ingredients"]),
+            )
+
+            cuisine_options = ["(none)", *CUISINES]
+            edit_cuisine = st.selectbox(
+                "Cuisine",
+                cuisine_options,
+                index=_select_index(cuisine_options, recipe.get("cuisine")),
+            )
+            meal_type_options = ["(none)", *MEAL_TYPES]
+            edit_meal_type = st.selectbox(
+                "Meal type",
+                meal_type_options,
+                index=_select_index(meal_type_options, recipe.get("meal_type")),
+            )
+            edit_cook_time = st.number_input(
+                "Cook time (min, 0 = unknown)",
+                min_value=0,
+                value=recipe.get("cook_time_minutes") or 0,
+            )
+
+            if st.form_submit_button("Save changes"):
+                update_payload = {
+                    "title": edit_title,
+                    "steps": [s.strip() for s in edit_steps_text.splitlines() if s.strip()],
+                    "cuisine": edit_cuisine if edit_cuisine != "(none)" else None,
+                    "meal_type": edit_meal_type if edit_meal_type != "(none)" else None,
+                    "cook_time_minutes": edit_cook_time or None,
+                    "ingredients": _parse_ingredients_text(edit_ingredients_text),
+                }
+                try:
+                    put_response = client.put(f"/recipes/{recipe['id']}", json=update_payload)
+                    put_response.raise_for_status()
+                    st.success("Saved.")
+                    st.rerun()
+                except httpx.HTTPStatusError as exc:
+                    st.error(f"Couldn't save: {_error_detail(exc)}")
+                except httpx.HTTPError as exc:
+                    st.error(f"Request failed: {exc}")

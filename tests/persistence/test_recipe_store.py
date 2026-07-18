@@ -3,7 +3,7 @@ from sqlalchemy import select
 
 from app.models import Ingredient, RawSource, User
 from app.parsing.recipe_parser import ParsedIngredient, ParsedRecipe
-from app.persistence.recipe_store import persist_recipe
+from app.persistence.recipe_store import IngredientSpec, persist_recipe, update_recipe
 
 
 @pytest.fixture
@@ -138,3 +138,83 @@ def test_persist_recipe_dedupes_parenthetical_and_plural_variants(db_session, ra
 
     onion_rows = db_session.scalars(select(Ingredient).where(Ingredient.name == "onion")).all()
     assert len(onion_rows) == 1
+
+
+def test_update_recipe_updates_scalar_fields(db_session, raw_source):
+    recipe = persist_recipe(db_session, raw_source, _parsed_recipe())
+
+    update_recipe(
+        db_session,
+        recipe,
+        title="Corrected Title",
+        steps=["Fixed step one", "Fixed step two"],
+        cuisine="korean",
+        meal_type="dinner",
+        cook_time_minutes=30,
+        ingredients=[IngredientSpec(name="rice")],
+    )
+
+    assert recipe.title == "Corrected Title"
+    assert recipe.steps == ["Fixed step one", "Fixed step two"]
+    assert recipe.cuisine == "korean"
+    assert recipe.meal_type == "dinner"
+    assert recipe.cook_time_minutes == 30
+
+
+def test_update_recipe_replaces_ingredients_wholesale(db_session, raw_source):
+    recipe = persist_recipe(db_session, raw_source, _parsed_recipe())
+    assert {ri.ingredient.name for ri in recipe.ingredients} == {"rice", "eggs"}
+
+    update_recipe(
+        db_session,
+        recipe,
+        title=recipe.title,
+        steps=recipe.steps,
+        cuisine=None,
+        meal_type=None,
+        cook_time_minutes=None,
+        ingredients=[
+            IngredientSpec(name="tofu", quantity="1 block"),
+            IngredientSpec(name="soy sauce"),
+        ],
+    )
+    db_session.flush()
+
+    names = {ri.ingredient.name for ri in recipe.ingredients}
+    assert names == {"tofu", "soy sauce"}
+
+
+def test_update_recipe_reuses_existing_ingredient_row(db_session, raw_source, user):
+    persist_recipe(
+        db_session,
+        raw_source,
+        _parsed_recipe(ingredients=[ParsedIngredient(name="garlic", raw_text="garlic")]),
+    )
+    other_source = RawSource(
+        user_id=user.id,
+        source_url="https://youtube.com/watch?v=jkl",
+        source_platform="youtube",
+        raw_text="another recipe",
+    )
+    db_session.add(other_source)
+    db_session.flush()
+    recipe = persist_recipe(
+        db_session,
+        other_source,
+        _parsed_recipe(title="Other", ingredients=[ParsedIngredient(name="onion", raw_text="onion")]),
+    )
+
+    update_recipe(
+        db_session,
+        recipe,
+        title=recipe.title,
+        steps=recipe.steps,
+        cuisine=None,
+        meal_type=None,
+        cook_time_minutes=None,
+        ingredients=[IngredientSpec(name="garlic")],
+    )
+    db_session.flush()
+
+    garlic_rows = db_session.scalars(select(Ingredient).where(Ingredient.name == "garlic")).all()
+    assert len(garlic_rows) == 1
