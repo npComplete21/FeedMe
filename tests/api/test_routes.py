@@ -233,3 +233,64 @@ def test_match_pantry_returns_ranked_matches(client, db_session):
     assert results[0]["match_ratio"] == 1.0
     assert results[1]["recipe"]["title"] == "No Match"
     assert results[1]["match_ratio"] == 0.0
+
+
+def test_chat_returns_reply_and_history(client, db_session, monkeypatch):
+    from app.chat.recipe_chat import ChatReply
+
+    get_current_user_id(db_session)
+    captured = {}
+
+    def fake_chat_about_recipes(db, user_id, message, history=None, **kwargs):
+        captured["message"] = message
+        captured["history"] = history
+        return ChatReply(
+            reply="Try Fried Rice.",
+            messages=[*(history or []), {"role": "user", "content": message}],
+        )
+
+    monkeypatch.setattr("app.api.routes.chat_about_recipes", fake_chat_about_recipes)
+
+    response = client.post("/chat", json={"message": "I have rice, what can I make?"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["reply"] == "Try Fried Rice."
+    assert body["history"][-1] == {"role": "user", "content": "I have rice, what can I make?"}
+    assert captured["message"] == "I have rice, what can I make?"
+    assert captured["history"] == []
+
+
+def test_chat_passes_through_history(client, db_session, monkeypatch):
+    from app.chat.recipe_chat import ChatReply
+
+    get_current_user_id(db_session)
+    captured = {}
+
+    def fake_chat_about_recipes(db, user_id, message, history=None, **kwargs):
+        captured["history"] = history
+        return ChatReply(reply="ok", messages=[])
+
+    monkeypatch.setattr("app.api.routes.chat_about_recipes", fake_chat_about_recipes)
+
+    prior_history = [{"role": "user", "content": "hi"}]
+    response = client.post("/chat", json={"message": "again", "history": prior_history})
+
+    assert response.status_code == 200
+    assert captured["history"] == prior_history
+
+
+def test_chat_maps_refusal_to_422(client, db_session, monkeypatch):
+    from app.chat.recipe_chat import RecipeChatError
+
+    get_current_user_id(db_session)
+
+    def fake_chat_about_recipes(db, user_id, message, history=None, **kwargs):
+        raise RecipeChatError("Model declined to respond")
+
+    monkeypatch.setattr("app.api.routes.chat_about_recipes", fake_chat_about_recipes)
+
+    response = client.post("/chat", json={"message": "anything"})
+
+    assert response.status_code == 422
+    assert "declined" in response.json()["detail"]

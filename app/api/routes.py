@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user_id, get_db
 from app.api.schemas import (
+    ChatRequest,
+    ChatResponse,
     IngestRequest,
     IngredientResponse,
     MatchRequest,
@@ -11,6 +13,7 @@ from app.api.schemas import (
     RecipeResponse,
     RecipeUpdateRequest,
 )
+from app.chat.recipe_chat import RecipeChatError, chat_about_recipes
 from app.ingestion.manual import EmptyCaptionError, EmptySourceUrlError
 from app.ingestion.pipeline import ingest_manual_caption, ingest_youtube
 from app.ingestion.youtube import NoCaptionsAvailableError, YouTubeFetchError
@@ -151,3 +154,17 @@ def match_pantry(
         )
         for m in matches
     ]
+
+
+@router.post("/chat", response_model=ChatResponse)
+def chat_with_assistant(
+    payload: ChatRequest,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+) -> ChatResponse:
+    try:
+        result = chat_about_recipes(db, user_id, payload.message, history=payload.history)
+    except RecipeChatError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return ChatResponse(reply=result.reply, history=result.messages)

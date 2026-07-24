@@ -108,6 +108,37 @@ if st.button("Find recipes"):
             for i, step in enumerate(recipe["steps"], 1):
                 st.write(f"{i}. {step}")
 
+st.header("Ask about your recipes")
+
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []  # opaque provider history, replayed each turn (API is stateless)
+if "chat_display" not in st.session_state:
+    st.session_state.chat_display = []  # [(role, text)] for rendering
+
+for role, text in st.session_state.chat_display:
+    with st.chat_message(role):
+        st.write(text)
+
+if prompt := st.chat_input("e.g. \"I have chicken, rice, and broccoli - what should I make?\""):
+    st.session_state.chat_display.append(("user", prompt))
+    with st.chat_message("user"):
+        st.write(prompt)
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking..."):
+            try:
+                response = client.post(
+                    "/chat", json={"message": prompt, "history": st.session_state.chat_history}
+                )
+                response.raise_for_status()
+                body = response.json()
+                st.session_state.chat_history = body["history"]
+                st.session_state.chat_display.append(("assistant", body["reply"]))
+                st.write(body["reply"])
+            except httpx.HTTPStatusError as exc:
+                st.error(f"Couldn't respond: {_error_detail(exc)}")
+            except httpx.HTTPError as exc:
+                st.error(f"Request failed: {exc}")
+
 st.header("Your recipes")
 
 filter_cols = st.columns(3)

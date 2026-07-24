@@ -53,3 +53,16 @@ class RecipeMatchResponse(BaseModel):
     matched_ingredients: list[str]
     missing_ingredients: list[str]
     match_ratio: float
+
+
+class ChatRequest(BaseModel):
+    message: str
+    # Opaque provider-shaped conversation history, echoed back verbatim by the
+    # client each turn (API is stateless) - not modeled field-by-field since
+    # its shape is Anthropic's message/content-block format, not ours.
+    history: list[dict] = []
+
+
+class ChatResponse(BaseModel):
+    reply: str
+    history: list[dict]
