@@ -30,19 +30,23 @@ Before doing anything else, read:
 
 **Fast iteration (hot-reload, one component at a time):**
 ```
-docker compose up -d db                           # Postgres only (check `docker ps` first)
+docker compose up -d db redis                     # Postgres + Redis only (check `docker ps` first)
 .venv/bin/alembic upgrade head                     # apply any new migrations
 .venv/bin/uvicorn app.main:app --reload             # backend, port 8000
+.venv/bin/celery -A app.worker worker --loglevel=info  # background worker, for ingestion
 .venv/bin/streamlit run app/ui/streamlit_app.py     # UI, port 8501
 .venv/bin/pytest                                    # full test suite (unit only, integration excluded)
 ```
+Recipe ingestion is async (Celery + Redis, see ADR-0013) — the worker process above must be running
+or `POST /recipes/ingest` will accept the request and enqueue it, but nothing will ever pick it up.
 Fresh venv setup: `pip install -e ".[api,ui,dev]"` (deps are split into `api`/`ui`/`dev` extras in
 `pyproject.toml` — see ADR-0012 — combine all three for local dev).
 
 **Full containerized stack (closer to how it'll actually run):**
 ```
-docker compose up -d --build                      # Postgres + API + UI, migrations run automatically
-docker compose logs -f api                         # tail a service's logs
+docker compose up -d --build      # Postgres + Redis + API + worker + UI, migrations run automatically
+docker compose logs -f worker                      # tail the worker specifically — that's where
+                                                     # ingestion (yt-dlp fetch + Claude parse) runs
 docker compose down                                # stop everything (add -v to also wipe the DB volume)
 ```
 Use this to verify a change works the way it will in production, not just against your venv.
@@ -55,8 +59,12 @@ variable at all — it has no use for it (see ADR-0004 / ADR-0012).
 ## Architecture at a glance
 
 FastAPI backend (`app/api`, `app/ingestion`, `app/parsing`, `app/persistence`, `app/matching`) +
-Streamlit UI (`app/ui`) as two separate processes talking over HTTP — the UI is deliberately a thin
-HTTP client with no direct imports of backend code (see ADR-0004). Both are Dockerized as separate
-images (`docker/api.Dockerfile`, `docker/ui.Dockerfile`, see ADR-0012), wired together with Postgres
-in `docker-compose.yml`. `app/models.py` + Alembic migrations define the schema; migrations run
-automatically in the `api` container's entrypoint before it starts serving.
+Streamlit UI (`app/ui`) as separate processes talking over HTTP — the UI is deliberately a thin HTTP
+client with no direct imports of backend code (see ADR-0004). Recipe ingestion runs on a separate
+Celery worker (`app/worker.py`), not the request thread — `POST /recipes/ingest` enqueues a task via
+Redis and returns immediately; the UI polls `GET /recipes/ingest/{task_id}` until it resolves (see
+ADR-0013). API, UI, and worker are each Dockerized as separate images (`docker/*.Dockerfile`, see
+ADR-0012/0013), wired together with Postgres and Redis in `docker-compose.yml`. `app/models.py` +
+Alembic migrations define the schema; migrations run automatically in the `api` container's
+entrypoint before it starts serving — the `worker` container deliberately does not also run them,
+to keep a single owner of schema changes.

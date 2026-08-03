@@ -12,6 +12,10 @@ class IngestRequest(BaseModel):
     caption_text: str | None = None
 
 
+class IngestAcceptedResponse(BaseModel):
+    task_id: str
+
+
 class IngredientResponse(BaseModel):
     name: str
     quantity: str | None = None
@@ -42,6 +46,12 @@ class RecipeResponse(BaseModel):
     meal_type: str | None = None
     cook_time_minutes: int | None = None
     created_at: datetime
+
+
+class IngestStatusResponse(BaseModel):
+    state: Literal["pending", "success", "failure"]
+    recipe: RecipeResponse | None = None
+    error: str | None = None
 
 
 class MatchRequest(BaseModel):

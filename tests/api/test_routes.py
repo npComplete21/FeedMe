@@ -1,3 +1,6 @@
+from unittest.mock import MagicMock
+
+from app.api.converters import recipe_to_response
 from app.api.deps import get_current_user_id
 from app.models import Ingredient, Recipe, RecipeIngredient
 
@@ -32,21 +35,20 @@ def _make_recipe(
     return recipe
 
 
-def test_ingest_recipe_youtube_returns_created_recipe(client, monkeypatch):
-    def fake_ingest_youtube(db, user_id, url):
-        return _make_recipe(db, user_id, title="Fried Rice")
-
-    monkeypatch.setattr("app.api.routes.ingest_youtube", fake_ingest_youtube)
+def test_ingest_recipe_youtube_enqueues_task(client, monkeypatch, db_session):
+    user_id = get_current_user_id(db_session)
+    fake_task = MagicMock()
+    fake_task.delay.return_value.id = "task-abc"
+    monkeypatch.setattr("app.api.routes.ingest_youtube_task", fake_task)
 
     response = client.post(
         "/recipes/ingest",
         json={"source_platform": "youtube", "url": "https://youtube.com/watch?v=abc"},
     )
 
-    assert response.status_code == 201
-    body = response.json()
-    assert body["title"] == "Fried Rice"
-    assert body["source_platform"] == "youtube"
+    assert response.status_code == 202
+    assert response.json() == {"task_id": "task-abc"}
+    fake_task.delay.assert_called_once_with(user_id, "https://youtube.com/watch?v=abc")
 
 
 def test_ingest_recipe_manual_requires_caption_text(client):
@@ -58,14 +60,11 @@ def test_ingest_recipe_manual_requires_caption_text(client):
     assert response.status_code == 422
 
 
-def test_ingest_recipe_manual_calls_manual_pipeline(client, monkeypatch):
-    captured = {}
-
-    def fake_ingest_manual_caption(db, user_id, url, caption_text, source_platform="instagram"):
-        captured["caption_text"] = caption_text
-        return _make_recipe(db, user_id, title="Manual Recipe")
-
-    monkeypatch.setattr("app.api.routes.ingest_manual_caption", fake_ingest_manual_caption)
+def test_ingest_recipe_manual_enqueues_task_with_caption(client, monkeypatch, db_session):
+    user_id = get_current_user_id(db_session)
+    fake_task = MagicMock()
+    fake_task.delay.return_value.id = "task-xyz"
+    monkeypatch.setattr("app.api.routes.ingest_manual_caption_task", fake_task)
 
     response = client.post(
         "/recipes/ingest",
@@ -76,26 +75,58 @@ def test_ingest_recipe_manual_calls_manual_pipeline(client, monkeypatch):
         },
     )
 
-    assert response.status_code == 201
-    assert captured["caption_text"] == "1 cup rice"
-    assert response.json()["title"] == "Manual Recipe"
-
-
-def test_ingest_recipe_maps_known_errors_to_422(client, monkeypatch):
-    from app.parsing.recipe_parser import RecipeParseError
-
-    def fake_ingest_youtube(db, user_id, url):
-        raise RecipeParseError("model declined")
-
-    monkeypatch.setattr("app.api.routes.ingest_youtube", fake_ingest_youtube)
-
-    response = client.post(
-        "/recipes/ingest",
-        json={"source_platform": "youtube", "url": "https://youtube.com/watch?v=abc"},
+    assert response.status_code == 202
+    assert response.json() == {"task_id": "task-xyz"}
+    fake_task.delay.assert_called_once_with(
+        user_id, "https://instagram.com/reel/abc", "1 cup rice", "instagram"
     )
 
-    assert response.status_code == 422
-    assert "model declined" in response.json()["detail"]
+
+def test_ingest_status_pending(client, monkeypatch):
+    fake_result = MagicMock()
+    fake_result.successful.return_value = False
+    fake_result.failed.return_value = False
+    monkeypatch.setattr("app.api.routes.AsyncResult", lambda task_id, app: fake_result)
+
+    response = client.get("/recipes/ingest/some-task-id")
+
+    assert response.status_code == 200
+    assert response.json() == {"state": "pending", "recipe": None, "error": None}
+
+
+def test_ingest_status_success_returns_recipe(client, monkeypatch, db_session):
+    user_id = get_current_user_id(db_session)
+    recipe = _make_recipe(db_session, user_id, title="Fried Rice", ingredients=["rice"])
+
+    fake_result = MagicMock()
+    fake_result.successful.return_value = True
+    fake_result.failed.return_value = False
+    fake_result.result = recipe_to_response(recipe).model_dump(mode="json")
+    monkeypatch.setattr("app.api.routes.AsyncResult", lambda task_id, app: fake_result)
+
+    response = client.get("/recipes/ingest/some-task-id")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "success"
+    assert body["recipe"]["title"] == "Fried Rice"
+    assert body["error"] is None
+
+
+def test_ingest_status_failure_returns_error(client, monkeypatch):
+    fake_result = MagicMock()
+    fake_result.successful.return_value = False
+    fake_result.failed.return_value = True
+    fake_result.result = ValueError("No captions available for this video")
+    monkeypatch.setattr("app.api.routes.AsyncResult", lambda task_id, app: fake_result)
+
+    response = client.get("/recipes/ingest/some-task-id")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "failure"
+    assert "No captions available" in body["error"]
+    assert body["recipe"] is None
 
 
 def test_list_recipes_scoped_to_current_user(client, db_session):

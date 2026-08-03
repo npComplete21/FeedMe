@@ -1,54 +1,28 @@
+from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.converters import recipe_to_response
 from app.api.deps import get_current_user_id, get_db
 from app.api.schemas import (
     ChatRequest,
     ChatResponse,
+    IngestAcceptedResponse,
     IngestRequest,
-    IngredientResponse,
+    IngestStatusResponse,
     MatchRequest,
     RecipeMatchResponse,
     RecipeResponse,
     RecipeUpdateRequest,
 )
 from app.chat.recipe_chat import RecipeChatError, chat_about_recipes
-from app.ingestion.manual import EmptyCaptionError, EmptySourceUrlError
-from app.ingestion.pipeline import ingest_manual_caption, ingest_youtube
-from app.ingestion.youtube import NoCaptionsAvailableError, YouTubeFetchError
 from app.matching.ingredient_matcher import MatchableIngredient, MatchableRecipe, match_recipes
 from app.models import Recipe
-from app.parsing.recipe_parser import RecipeParseError
 from app.persistence.recipe_store import IngredientSpec, update_recipe
+from app.worker import celery_app, ingest_manual_caption_task, ingest_youtube_task
 
 router = APIRouter()
-
-_INGESTION_ERRORS = (
-    YouTubeFetchError,
-    NoCaptionsAvailableError,
-    RecipeParseError,
-    EmptyCaptionError,
-    EmptySourceUrlError,
-)
-
-
-def _recipe_to_response(recipe: Recipe) -> RecipeResponse:
-    return RecipeResponse(
-        id=recipe.id,
-        title=recipe.title,
-        source_url=recipe.source_url,
-        source_platform=recipe.source_platform,
-        steps=recipe.steps,
-        ingredients=[
-            IngredientResponse(name=ri.ingredient.name, quantity=ri.quantity)
-            for ri in recipe.ingredients
-        ],
-        cuisine=recipe.cuisine,
-        meal_type=recipe.meal_type,
-        cook_time_minutes=recipe.cook_time_minutes,
-        created_at=recipe.created_at,
-    )
 
 
 def _to_matchable(recipe: Recipe) -> MatchableRecipe:
@@ -59,30 +33,35 @@ def _to_matchable(recipe: Recipe) -> MatchableRecipe:
     )
 
 
-@router.post("/recipes/ingest", response_model=RecipeResponse, status_code=201)
+@router.post("/recipes/ingest", response_model=IngestAcceptedResponse, status_code=202)
 def ingest_recipe(
     payload: IngestRequest,
-    db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
-) -> RecipeResponse:
-    try:
-        if payload.source_platform == "youtube":
-            recipe = ingest_youtube(db, user_id, payload.url)
-        else:
-            if not payload.caption_text:
-                raise HTTPException(
-                    status_code=422,
-                    detail="caption_text is required for non-YouTube sources",
-                )
-            recipe = ingest_manual_caption(
-                db, user_id, payload.url, payload.caption_text, payload.source_platform
+) -> IngestAcceptedResponse:
+    if payload.source_platform == "youtube":
+        result = ingest_youtube_task.delay(user_id, payload.url)
+    else:
+        if not payload.caption_text:
+            raise HTTPException(
+                status_code=422,
+                detail="caption_text is required for non-YouTube sources",
             )
-    except _INGESTION_ERRORS as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        result = ingest_manual_caption_task.delay(
+            user_id, payload.url, payload.caption_text, payload.source_platform
+        )
 
-    db.commit()
-    db.refresh(recipe)
-    return _recipe_to_response(recipe)
+    return IngestAcceptedResponse(task_id=result.id)
+
+
+@router.get("/recipes/ingest/{task_id}", response_model=IngestStatusResponse)
+def ingest_status(task_id: str) -> IngestStatusResponse:
+    result = AsyncResult(task_id, app=celery_app)
+
+    if result.successful():
+        return IngestStatusResponse(state="success", recipe=RecipeResponse(**result.result))
+    if result.failed():
+        return IngestStatusResponse(state="failure", error=str(result.result))
+    return IngestStatusResponse(state="pending")
 
 
 @router.get("/recipes", response_model=list[RecipeResponse])
@@ -102,7 +81,7 @@ def list_recipes(
         query = query.where(Recipe.cook_time_minutes <= max_cook_time_minutes)
 
     recipes = db.scalars(query.order_by(Recipe.created_at.desc())).all()
-    return [_recipe_to_response(r) for r in recipes]
+    return [recipe_to_response(r) for r in recipes]
 
 
 @router.put("/recipes/{recipe_id}", response_model=RecipeResponse)
@@ -132,7 +111,7 @@ def update_recipe_route(
     )
     db.commit()
     db.refresh(recipe)
-    return _recipe_to_response(recipe)
+    return recipe_to_response(recipe)
 
 
 @router.post("/match", response_model=list[RecipeMatchResponse])
@@ -147,7 +126,7 @@ def match_pantry(
 
     return [
         RecipeMatchResponse(
-            recipe=_recipe_to_response(recipe_by_id[m.recipe.id]),
+            recipe=recipe_to_response(recipe_by_id[m.recipe.id]),
             matched_ingredients=m.matched_ingredients,
             missing_ingredients=m.missing_ingredients,
             match_ratio=m.match_ratio,

@@ -24,3 +24,9 @@ bullet point six months from now).
   imports. If the allowed values change often enough that this becomes annoying, consider a shared
   constants module both sides can depend on without pulling in `anthropic`/`sqlalchemy`.
   *Noted: 2026-07-17, during Phase 1.2.*
+
+- [ ] **Containers run as root.** Celery logs a security warning on startup (`ROOT_DISCOURAGED`) and
+  none of the Dockerfiles (`docker/api.Dockerfile`, `docker/ui.Dockerfile`, `docker/worker.Dockerfile`)
+  create/use a non-root user. Fine for a local-only Docker Compose stack; worth fixing (add a user,
+  `chown` the app dir, `USER` directive) before Phase 3 actually exposes any of this to the internet.
+  *Noted: 2026-08-03, during Phase 2.2.*

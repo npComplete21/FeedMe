@@ -1,4 +1,5 @@
 import os
+import time
 
 import httpx
 import streamlit as st
@@ -74,15 +75,38 @@ if st.button("Ingest recipe"):
         payload = {"source_platform": source_platform, "url": url}
         if caption_text:
             payload["caption_text"] = caption_text
-        with st.spinner("Parsing recipe..."):
-            try:
-                response = client.post("/recipes/ingest", json=payload)
-                response.raise_for_status()
-                st.success(f"Added: {response.json()['title']}")
-            except httpx.HTTPStatusError as exc:
-                st.error(f"Couldn't parse this recipe: {_error_detail(exc)}")
-            except httpx.HTTPError as exc:
-                st.error(f"Request failed: {exc}")
+        try:
+            response = client.post("/recipes/ingest", json=payload)
+            response.raise_for_status()
+            task_id = response.json()["task_id"]
+        except httpx.HTTPStatusError as exc:
+            st.error(f"Couldn't submit this recipe: {_error_detail(exc)}")
+        except httpx.HTTPError as exc:
+            st.error(f"Request failed: {exc}")
+        else:
+            # Ingestion now runs on a background worker (Celery + Redis, see
+            # ADR-0013) - poll for completion instead of blocking on one call.
+            with st.status("Parsing recipe...") as status:
+                while True:
+                    try:
+                        poll = client.get(f"/recipes/ingest/{task_id}")
+                        poll.raise_for_status()
+                        result = poll.json()
+                    except httpx.HTTPError as exc:
+                        status.update(label=f"Request failed: {exc}", state="error")
+                        break
+
+                    if result["state"] == "success":
+                        status.update(
+                            label=f"Added: {result['recipe']['title']}", state="complete"
+                        )
+                        break
+                    if result["state"] == "failure":
+                        status.update(
+                            label=f"Couldn't parse this recipe: {result['error']}", state="error"
+                        )
+                        break
+                    time.sleep(2)
 
 st.header("What can I make?")
 pantry_text = st.text_input("Ingredients you have (comma-separated)")
