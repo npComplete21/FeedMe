@@ -56,6 +56,12 @@ workflow, and injected into the `api` container via `env_file: .env` in `docker-
 containerized workflow (never baked into the image itself). The `ui` service doesn't get this
 variable at all — it has no use for it (see ADR-0004 / ADR-0012).
 
+Every API endpoint except `/health` requires `Authorization: Bearer <FEEDME_API_TOKEN>` (see
+ADR-0014). Generate one with `python -c "import secrets; print(secrets.token_hex(32))"` and add it to
+`.env` — both `app/api/deps.py` and `app/ui/streamlit_app.py` fail fast with a clear message if it's
+missing, rather than silently running unprotected. The Streamlit UI attaches it automatically; you
+never need to enter it by hand. `curl`/`httpie` calls against the API directly need the header.
+
 ## Architecture at a glance
 
 FastAPI backend (`app/api`, `app/ingestion`, `app/parsing`, `app/persistence`, `app/matching`) +

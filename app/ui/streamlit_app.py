@@ -9,6 +9,17 @@ load_dotenv()
 
 API_BASE_URL = os.environ.get("FEEDME_API_URL", "http://localhost:8000")
 
+# Shared secret required by every API endpoint except /health (see ADR-0014).
+# The UI is a trusted client that already knows this value - no login screen
+# here, that's Phase 4's real multi-user auth story.
+API_TOKEN = os.environ.get("FEEDME_API_TOKEN")
+if not API_TOKEN:
+    st.error(
+        "FEEDME_API_TOKEN is not set. Generate one with "
+        '`python -c "import secrets; print(secrets.token_hex(32))"`, add it to .env, and restart.'
+    )
+    st.stop()
+
 # Kept in sync by hand with Cuisine/MealType in app/parsing/recipe_parser.py.
 # Not imported directly - the UI is a pure HTTP client of the API (ADR-0004),
 # and importing backend code here would drag anthropic/sqlalchemy/etc. into
@@ -22,7 +33,11 @@ MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack", "dessert", "drink", "appe
 st.set_page_config(page_title="FeedMe", page_icon="🍳")
 st.title("FeedMe")
 
-client = httpx.Client(base_url=API_BASE_URL, timeout=60.0)
+client = httpx.Client(
+    base_url=API_BASE_URL,
+    timeout=60.0,
+    headers={"Authorization": f"Bearer {API_TOKEN}"},
+)
 
 
 def _error_detail(exc: httpx.HTTPStatusError) -> str:

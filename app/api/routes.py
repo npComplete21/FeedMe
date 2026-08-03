@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.converters import recipe_to_response
-from app.api.deps import get_current_user_id, get_db
+from app.api.deps import get_current_user_id, get_db, require_auth_token
 from app.api.schemas import (
     ChatRequest,
     ChatResponse,
@@ -22,7 +22,7 @@ from app.models import Recipe
 from app.persistence.recipe_store import IngredientSpec, update_recipe
 from app.worker import celery_app, ingest_manual_caption_task, ingest_youtube_task
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_auth_token)])
 
 
 def _to_matchable(recipe: Recipe) -> MatchableRecipe:
