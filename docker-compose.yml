@@ -10,6 +10,38 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U feedme"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    env_file: .env
+    environment:
+      # Overrides .env's localhost value - inside the Compose network, `db`
+      # is the service's hostname, not localhost.
+      DATABASE_URL: postgresql+psycopg://feedme:feedme@db:5432/feedme
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  ui:
+    build:
+      context: .
+      dockerfile: docker/ui.Dockerfile
+    environment:
+      # Same reasoning - reach the API by its Compose service name, not localhost.
+      FEEDME_API_URL: http://api:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
 
 volumes:
   pgdata:

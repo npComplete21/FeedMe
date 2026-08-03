@@ -42,11 +42,12 @@ second API call when echoed back as conversation history.
 
 ## Phase 2 — Productionize
 
-- [ ] Dockerize everything (API, worker, UI)
-- [ ] Move ingestion to Celery + Redis (non-blocking, retryable)
-- [ ] Add auth — starts single-user-token, designed to extend to real multi-user auth
-- [ ] Tests for parsing/matching logic (if not already covered in Phase 0)
-- [ ] Full docker-compose stack (Postgres, Redis, backend, worker, UI)
+- [x] 2.1 Dockerize API + UI (see [ADR-0012](adr/0012-dockerize-api-and-ui-as-separate-images.md)) —
+  worker image comes with 2.2, once Celery introduces something to dockerize
+- [ ] 2.2 Move ingestion to Celery + Redis (non-blocking, retryable) — includes dockerizing the worker
+- [ ] 2.3 Add auth — starts single-user-token, designed to extend to real multi-user auth
+- [ ] 2.4 Tests for parsing/matching logic (audit — likely already covered from Phase 0, confirm rather than assume)
+- [ ] 2.5 Full docker-compose stack (Postgres, Redis, backend, worker, UI) — 2.1 already covers Postgres+API+UI; this closes the gap once Redis+worker exist
 
 ## Phase 3 — Ship to AWS / k8s
 
