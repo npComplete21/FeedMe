@@ -73,10 +73,8 @@ def _mock_client(*responses: BetaMessage) -> anthropic.Anthropic:
     return client
 
 
-def test_chat_calls_match_pantry_tool_and_returns_final_reply(db_session):
-    from app.api.deps import get_current_user_id
-
-    user_id = get_current_user_id(db_session)
+def test_chat_calls_match_pantry_tool_and_returns_final_reply(db_session, test_user_id):
+    user_id = test_user_id
     _make_recipe(db_session, user_id, "Fried Rice", ["rice", "eggs"])
     _make_recipe(db_session, user_id, "Durian Pie", ["durian"])
 
@@ -101,10 +99,8 @@ def test_chat_calls_match_pantry_tool_and_returns_final_reply(db_session):
     assert "Durian Pie" in tool_result_content
 
 
-def test_chat_with_no_recipes_reports_that_to_the_model(db_session):
-    from app.api.deps import get_current_user_id
-
-    user_id = get_current_user_id(db_session)
+def test_chat_with_no_recipes_reports_that_to_the_model(db_session, test_user_id):
+    user_id = test_user_id
 
     client = _mock_client(
         _tool_use_message(["rice"]),
@@ -116,10 +112,8 @@ def test_chat_with_no_recipes_reports_that_to_the_model(db_session):
     assert "don't have any saved recipes" in result.reply
 
 
-def test_chat_skips_tool_call_when_not_needed(db_session):
-    from app.api.deps import get_current_user_id
-
-    user_id = get_current_user_id(db_session)
+def test_chat_skips_tool_call_when_not_needed(db_session, test_user_id):
+    user_id = test_user_id
 
     client = _mock_client(_text_message("Sure, what ingredients do you have on hand?"))
 
@@ -129,20 +123,16 @@ def test_chat_skips_tool_call_when_not_needed(db_session):
     assert client.beta.messages.parse.call_count == 1
 
 
-def test_chat_raises_on_refusal(db_session):
-    from app.api.deps import get_current_user_id
-
-    user_id = get_current_user_id(db_session)
+def test_chat_raises_on_refusal(db_session, test_user_id):
+    user_id = test_user_id
     client = _mock_client(_text_message("", stop_reason="refusal"))
 
     with pytest.raises(RecipeChatError):
         chat_about_recipes(db_session, user_id, "anything", client=client)
 
 
-def test_chat_passes_prior_history_to_the_model(db_session):
-    from app.api.deps import get_current_user_id
-
-    user_id = get_current_user_id(db_session)
+def test_chat_passes_prior_history_to_the_model(db_session, test_user_id):
+    user_id = test_user_id
     client = _mock_client(_text_message("Got it, noted you like spicy food."))
 
     history = [
@@ -163,13 +153,11 @@ def test_chat_passes_prior_history_to_the_model(db_session):
     assert result.messages[-1]["content"][0]["text"] == "Got it, noted you like spicy food."
 
 
-def test_chat_history_omits_parsed_output_so_it_replays_cleanly(db_session):
+def test_chat_history_omits_parsed_output_so_it_replays_cleanly(db_session, test_user_id):
     # Regression test: tool_runner's .parse() call returns ParsedBetaTextBlock,
     # whose extra `parsed_output` field the API rejects ("Extra inputs are not
     # permitted") if echoed back verbatim as a later turn's message content.
-    from app.api.deps import get_current_user_id
-
-    user_id = get_current_user_id(db_session)
+    user_id = test_user_id
     client = _mock_client(_text_message("Sure thing."))
 
     result = chat_about_recipes(db_session, user_id, "hello", client=client)
@@ -180,10 +168,8 @@ def test_chat_history_omits_parsed_output_so_it_replays_cleanly(db_session):
 
 
 @pytest.mark.integration
-def test_chat_against_real_api(db_session):
-    from app.api.deps import get_current_user_id
-
-    user_id = get_current_user_id(db_session)
+def test_chat_against_real_api(db_session, test_user_id):
+    user_id = test_user_id
     _make_recipe(db_session, user_id, "Fried Rice", ["rice", "eggs"])
 
     result = chat_about_recipes(db_session, user_id, "I have rice and eggs, what can I make?")

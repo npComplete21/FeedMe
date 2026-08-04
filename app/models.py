@@ -15,6 +15,10 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String, unique=True)
+    # Nullable at the DB level so existing rows (from the Phase 2 single-shared-token era)
+    # don't need a data migration - a NULL hash simply can never verify, so that account
+    # can't log in until a real password is set for it (see ADR-0015).
+    password_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(_TIMESTAMP, server_default=func.now())
 
     recipes: Mapped[list["Recipe"]] = relationship(back_populates="user")

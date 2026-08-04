@@ -65,11 +65,10 @@ services:
     environment:
       # Same reasoning - reach the API by its Compose service name, not localhost.
       FEEDME_API_URL: http://api:8000
-      # Pulled from the top-level .env via Compose variable substitution rather
-      # than `env_file: .env` (which api/worker use) - the UI has no use for
-      # ANTHROPIC_API_KEY, so it shouldn't be sitting in this container's env
-      # just because it's in the file (see ADR-0014).
-      FEEDME_API_TOKEN: ${FEEDME_API_TOKEN}
+      # No secrets needed here at all now (see ADR-0015) - the UI gets its
+      # per-user token at runtime from /auth/login or /auth/register, rather
+      # than needing any credential pre-configured the way the old single
+      # shared token did.
     ports:
       - "8501:8501"
     depends_on:

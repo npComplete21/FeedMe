@@ -23,6 +23,8 @@ api = [
     "anthropic>=0.40",
     "celery>=5.4",
     "redis>=5.0",
+    "bcrypt>=4.1",
+    "pyjwt>=2.9",
 ]
 ui = [
     "streamlit>=1.38",

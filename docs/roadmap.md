@@ -58,6 +58,11 @@ second API call when echoed back as conversation history.
 
 ## Phase 3 — Ship to AWS / k8s
 
+**Reordered: Phase 4's multi-user auth is being done first** (see below) — the AWS/k8s decision
+stalled on an open question (k3s vs EKS, real cost either way) while exploring free-hosting
+alternatives for a small (~50 user) deployment. Auth doesn't depend on that decision, so no reason
+to block it. Revisit this phase once a hosting target is actually chosen.
+
 - [ ] Decide EKS vs k3s (see [ADR-0005](adr/0005-k3s-vs-eks.md) — currently **proposed**, not yet decided)
 - [ ] ECR for images
 - [ ] Kubernetes manifests or Helm chart — Deployment/Service/Ingress for API, worker
@@ -68,7 +73,12 @@ second API call when echoed back as conversation history.
 
 ## Phase 4 — Multi-user + polish
 
-- [ ] Real multi-user auth (this is where [ADR-0002](adr/0002-user-id-scoping-from-day-one.md) pays off)
+- [x] Real multi-user auth (this is where [ADR-0002](adr/0002-user-id-scoping-from-day-one.md) pays off) —
+  username/password + JWT, replacing the single-shared-token scheme from
+  [ADR-0014](adr/0014-single-shared-token-auth.md); registration gated by a shared invite code for
+  a bounded (~50 user) rollout (see [ADR-0015](adr/0015-jwt-multi-user-auth.md)). Verified live:
+  register/log in/log out through the real Streamlit UI, two accounts confirmed data-isolated, wrong
+  password rejected, pre-existing account retained its recipes after getting a real password.
 - [ ] PWA / share-sheet shortcut for faster link capture
 - [ ] Recipe photos, ratings, "cooked this" tracking
 - [ ] Weekly meal-plan generator from pantry + recipe list

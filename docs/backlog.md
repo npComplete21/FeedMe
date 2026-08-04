@@ -30,3 +30,11 @@ bullet point six months from now).
   create/use a non-root user. Fine for a local-only Docker Compose stack; worth fixing (add a user,
   `chown` the app dir, `USER` directive) before Phase 3 actually exposes any of this to the internet.
   *Noted: 2026-08-03, during Phase 2.2.*
+
+- [ ] **`GET /recipes/ingest/{task_id}` doesn't scope by `user_id`.** Any authenticated user can poll
+  any other user's Celery task ID for ingestion status/result, since the task_id → result lookup goes
+  straight to Celery's result backend with no ownership check. Low practical risk (task IDs are
+  UUIDs, not guessable), but a real gap now that accounts are genuinely distinct people rather than
+  one hardcoded user. Fix: store `user_id` alongside the task at enqueue time (or embed it in the
+  task result) and check it in `app/api/routes.py`'s `ingest_status` handler.
+  *Noted: 2026-08-04, during Phase 4 (see [ADR-0015](adr/0015-jwt-multi-user-auth.md)).*

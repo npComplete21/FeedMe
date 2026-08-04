@@ -6,9 +6,11 @@ load_dotenv()
 
 from fastapi import FastAPI  # noqa: E402
 
+from app.api.auth_routes import router as auth_router  # noqa: E402
 from app.api.routes import router  # noqa: E402
 
 app = FastAPI(title="FeedMe")
+app.include_router(auth_router)
 app.include_router(router)
 
 

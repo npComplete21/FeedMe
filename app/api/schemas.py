@@ -6,6 +6,21 @@ from pydantic import BaseModel
 from app.parsing.recipe_parser import Cuisine, MealType
 
 
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    registration_code: str
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+
+
 class IngestRequest(BaseModel):
     source_platform: Literal["youtube", "instagram"]
     url: str

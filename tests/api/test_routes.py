@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock
 
 from app.api.converters import recipe_to_response
-from app.api.deps import get_current_user_id
 from app.models import Ingredient, Recipe, RecipeIngredient
 
 
@@ -35,8 +34,7 @@ def _make_recipe(
     return recipe
 
 
-def test_ingest_recipe_youtube_enqueues_task(client, monkeypatch, db_session):
-    user_id = get_current_user_id(db_session)
+def test_ingest_recipe_youtube_enqueues_task(client, monkeypatch, db_session, test_user_id):
     fake_task = MagicMock()
     fake_task.delay.return_value.id = "task-abc"
     monkeypatch.setattr("app.api.routes.ingest_youtube_task", fake_task)
@@ -48,7 +46,7 @@ def test_ingest_recipe_youtube_enqueues_task(client, monkeypatch, db_session):
 
     assert response.status_code == 202
     assert response.json() == {"task_id": "task-abc"}
-    fake_task.delay.assert_called_once_with(user_id, "https://youtube.com/watch?v=abc")
+    fake_task.delay.assert_called_once_with(test_user_id, "https://youtube.com/watch?v=abc")
 
 
 def test_ingest_recipe_manual_requires_caption_text(client):
@@ -60,8 +58,9 @@ def test_ingest_recipe_manual_requires_caption_text(client):
     assert response.status_code == 422
 
 
-def test_ingest_recipe_manual_enqueues_task_with_caption(client, monkeypatch, db_session):
-    user_id = get_current_user_id(db_session)
+def test_ingest_recipe_manual_enqueues_task_with_caption(
+    client, monkeypatch, db_session, test_user_id
+):
     fake_task = MagicMock()
     fake_task.delay.return_value.id = "task-xyz"
     monkeypatch.setattr("app.api.routes.ingest_manual_caption_task", fake_task)
@@ -78,7 +77,7 @@ def test_ingest_recipe_manual_enqueues_task_with_caption(client, monkeypatch, db
     assert response.status_code == 202
     assert response.json() == {"task_id": "task-xyz"}
     fake_task.delay.assert_called_once_with(
-        user_id, "https://instagram.com/reel/abc", "1 cup rice", "instagram"
+        test_user_id, "https://instagram.com/reel/abc", "1 cup rice", "instagram"
     )
 
 
@@ -94,9 +93,8 @@ def test_ingest_status_pending(client, monkeypatch):
     assert response.json() == {"state": "pending", "recipe": None, "error": None}
 
 
-def test_ingest_status_success_returns_recipe(client, monkeypatch, db_session):
-    user_id = get_current_user_id(db_session)
-    recipe = _make_recipe(db_session, user_id, title="Fried Rice", ingredients=["rice"])
+def test_ingest_status_success_returns_recipe(client, monkeypatch, db_session, test_user_id):
+    recipe = _make_recipe(db_session, test_user_id, title="Fried Rice", ingredients=["rice"])
 
     fake_result = MagicMock()
     fake_result.successful.return_value = True
@@ -129,10 +127,9 @@ def test_ingest_status_failure_returns_error(client, monkeypatch):
     assert body["recipe"] is None
 
 
-def test_list_recipes_scoped_to_current_user(client, db_session):
-    user_id = get_current_user_id(db_session)
-    _make_recipe(db_session, user_id, title="Recipe A")
-    _make_recipe(db_session, user_id, title="Recipe B")
+def test_list_recipes_scoped_to_current_user(client, db_session, test_user_id):
+    _make_recipe(db_session, test_user_id, title="Recipe A")
+    _make_recipe(db_session, test_user_id, title="Recipe B")
 
     response = client.get("/recipes")
 
@@ -141,10 +138,9 @@ def test_list_recipes_scoped_to_current_user(client, db_session):
     assert titles == {"Recipe A", "Recipe B"}
 
 
-def test_list_recipes_filters_by_cuisine(client, db_session):
-    user_id = get_current_user_id(db_session)
-    _make_recipe(db_session, user_id, title="Bibimbap", cuisine="korean")
-    _make_recipe(db_session, user_id, title="Tacos", cuisine="mexican")
+def test_list_recipes_filters_by_cuisine(client, db_session, test_user_id):
+    _make_recipe(db_session, test_user_id, title="Bibimbap", cuisine="korean")
+    _make_recipe(db_session, test_user_id, title="Tacos", cuisine="mexican")
 
     response = client.get("/recipes", params={"cuisine": "korean"})
 
@@ -153,10 +149,9 @@ def test_list_recipes_filters_by_cuisine(client, db_session):
     assert titles == ["Bibimbap"]
 
 
-def test_list_recipes_filters_by_meal_type(client, db_session):
-    user_id = get_current_user_id(db_session)
-    _make_recipe(db_session, user_id, title="Pancakes", meal_type="breakfast")
-    _make_recipe(db_session, user_id, title="Steak", meal_type="dinner")
+def test_list_recipes_filters_by_meal_type(client, db_session, test_user_id):
+    _make_recipe(db_session, test_user_id, title="Pancakes", meal_type="breakfast")
+    _make_recipe(db_session, test_user_id, title="Steak", meal_type="dinner")
 
     response = client.get("/recipes", params={"meal_type": "breakfast"})
 
@@ -165,11 +160,12 @@ def test_list_recipes_filters_by_meal_type(client, db_session):
     assert titles == ["Pancakes"]
 
 
-def test_list_recipes_filters_by_max_cook_time_and_excludes_unknown(client, db_session):
-    user_id = get_current_user_id(db_session)
-    _make_recipe(db_session, user_id, title="Quick Stir Fry", cook_time_minutes=15)
-    _make_recipe(db_session, user_id, title="Slow Roast", cook_time_minutes=180)
-    _make_recipe(db_session, user_id, title="Unknown Time", cook_time_minutes=None)
+def test_list_recipes_filters_by_max_cook_time_and_excludes_unknown(
+    client, db_session, test_user_id
+):
+    _make_recipe(db_session, test_user_id, title="Quick Stir Fry", cook_time_minutes=15)
+    _make_recipe(db_session, test_user_id, title="Slow Roast", cook_time_minutes=180)
+    _make_recipe(db_session, test_user_id, title="Unknown Time", cook_time_minutes=None)
 
     response = client.get("/recipes", params={"max_cook_time_minutes": 30})
 
@@ -178,9 +174,8 @@ def test_list_recipes_filters_by_max_cook_time_and_excludes_unknown(client, db_s
     assert titles == ["Quick Stir Fry"]
 
 
-def test_update_recipe_updates_fields_and_ingredients(client, db_session):
-    user_id = get_current_user_id(db_session)
-    recipe = _make_recipe(db_session, user_id, title="Fried Rice", ingredients=["rice"])
+def test_update_recipe_updates_fields_and_ingredients(client, db_session, test_user_id):
+    recipe = _make_recipe(db_session, test_user_id, title="Fried Rice", ingredients=["rice"])
 
     response = client.put(
         f"/recipes/{recipe.id}",
@@ -205,9 +200,8 @@ def test_update_recipe_updates_fields_and_ingredients(client, db_session):
     assert names == {"rice", "eggs"}
 
 
-def test_update_recipe_rejects_cuisine_outside_allowed_set(client, db_session):
-    user_id = get_current_user_id(db_session)
-    recipe = _make_recipe(db_session, user_id)
+def test_update_recipe_rejects_cuisine_outside_allowed_set(client, db_session, test_user_id):
+    recipe = _make_recipe(db_session, test_user_id)
 
     response = client.put(
         f"/recipes/{recipe.id}",
@@ -223,8 +217,6 @@ def test_update_recipe_rejects_cuisine_outside_allowed_set(client, db_session):
 
 
 def test_update_recipe_returns_404_for_nonexistent_recipe(client, db_session):
-    get_current_user_id(db_session)
-
     response = client.put(
         "/recipes/999999",
         json={"title": "X", "steps": [], "ingredients": []},
@@ -234,14 +226,10 @@ def test_update_recipe_returns_404_for_nonexistent_recipe(client, db_session):
 
 
 def test_update_recipe_returns_404_for_another_users_recipe(client, db_session):
-    from app.models import User
+    from tests.conftest import create_test_user
 
-    other_user = User(email="someone-else@example.com")
-    db_session.add(other_user)
-    db_session.flush()
-    other_recipe = _make_recipe(db_session, other_user.id, title="Not Yours")
-
-    get_current_user_id(db_session)  # ensures the default user exists too
+    other_user_id = create_test_user(db_session, email="someone-else@example.com")
+    other_recipe = _make_recipe(db_session, other_user_id, title="Not Yours")
 
     response = client.put(
         f"/recipes/{other_recipe.id}",
@@ -251,10 +239,9 @@ def test_update_recipe_returns_404_for_another_users_recipe(client, db_session):
     assert response.status_code == 404
 
 
-def test_match_pantry_returns_ranked_matches(client, db_session):
-    user_id = get_current_user_id(db_session)
-    _make_recipe(db_session, user_id, title="Full Match", ingredients=["rice"])
-    _make_recipe(db_session, user_id, title="No Match", ingredients=["durian"])
+def test_match_pantry_returns_ranked_matches(client, db_session, test_user_id):
+    _make_recipe(db_session, test_user_id, title="Full Match", ingredients=["rice"])
+    _make_recipe(db_session, test_user_id, title="No Match", ingredients=["durian"])
 
     response = client.post("/match", json={"pantry": ["rice"]})
 
@@ -269,7 +256,6 @@ def test_match_pantry_returns_ranked_matches(client, db_session):
 def test_chat_returns_reply_and_history(client, db_session, monkeypatch):
     from app.chat.recipe_chat import ChatReply
 
-    get_current_user_id(db_session)
     captured = {}
 
     def fake_chat_about_recipes(db, user_id, message, history=None, **kwargs):
@@ -295,7 +281,6 @@ def test_chat_returns_reply_and_history(client, db_session, monkeypatch):
 def test_chat_passes_through_history(client, db_session, monkeypatch):
     from app.chat.recipe_chat import ChatReply
 
-    get_current_user_id(db_session)
     captured = {}
 
     def fake_chat_about_recipes(db, user_id, message, history=None, **kwargs):
@@ -313,8 +298,6 @@ def test_chat_passes_through_history(client, db_session, monkeypatch):
 
 def test_chat_maps_refusal_to_422(client, db_session, monkeypatch):
     from app.chat.recipe_chat import RecipeChatError
-
-    get_current_user_id(db_session)
 
     def fake_chat_about_recipes(db, user_id, message, history=None, **kwargs):
         raise RecipeChatError("Model declined to respond")

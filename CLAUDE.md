@@ -56,11 +56,16 @@ workflow, and injected into the `api` container via `env_file: .env` in `docker-
 containerized workflow (never baked into the image itself). The `ui` service doesn't get this
 variable at all — it has no use for it (see ADR-0004 / ADR-0012).
 
-Every API endpoint except `/health` requires `Authorization: Bearer <FEEDME_API_TOKEN>` (see
-ADR-0014). Generate one with `python -c "import secrets; print(secrets.token_hex(32))"` and add it to
-`.env` — both `app/api/deps.py` and `app/ui/streamlit_app.py` fail fast with a clear message if it's
-missing, rather than silently running unprotected. The Streamlit UI attaches it automatically; you
-never need to enter it by hand. `curl`/`httpie` calls against the API directly need the header.
+Every API endpoint except `/health`, `/auth/register`, and `/auth/login` requires
+`Authorization: Bearer <JWT>` (see ADR-0015 — supersedes the single-shared-token scheme of
+ADR-0014). Real accounts: `POST /auth/register` (email + password + `FEEDME_REGISTRATION_CODE`) or
+`POST /auth/login` (email + password) returns an `access_token` to use as the bearer token, valid for
+`JWT_EXPIRATION_DAYS` (default 14). Both `JWT_SECRET_KEY` and `FEEDME_REGISTRATION_CODE` must be set
+in `.env` — generate with `python -c "import secrets; print(secrets.token_hex(32))"` and
+`python -c "import secrets; print(secrets.token_hex(16))"` respectively; `app/api/auth.py` and
+`app/api/auth_routes.py` fail fast with a clear message if either is missing. The Streamlit UI has its
+own login/register screen — log in once per browser session, no token to enter by hand. `curl`/`httpie`
+calls against the API directly need to call `/auth/login` first and pass the returned token.
 
 ## Architecture at a glance
 

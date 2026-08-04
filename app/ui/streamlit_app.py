@@ -9,17 +9,6 @@ load_dotenv()
 
 API_BASE_URL = os.environ.get("FEEDME_API_URL", "http://localhost:8000")
 
-# Shared secret required by every API endpoint except /health (see ADR-0014).
-# The UI is a trusted client that already knows this value - no login screen
-# here, that's Phase 4's real multi-user auth story.
-API_TOKEN = os.environ.get("FEEDME_API_TOKEN")
-if not API_TOKEN:
-    st.error(
-        "FEEDME_API_TOKEN is not set. Generate one with "
-        '`python -c "import secrets; print(secrets.token_hex(32))"`, add it to .env, and restart.'
-    )
-    st.stop()
-
 # Kept in sync by hand with Cuisine/MealType in app/parsing/recipe_parser.py.
 # Not imported directly - the UI is a pure HTTP client of the API (ADR-0004),
 # and importing backend code here would drag anthropic/sqlalchemy/etc. into
@@ -31,13 +20,11 @@ CUISINES = [
 MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack", "dessert", "drink", "appetizer"]
 
 st.set_page_config(page_title="FeedMe", page_icon="🍳")
-st.title("FeedMe")
 
-client = httpx.Client(
-    base_url=API_BASE_URL,
-    timeout=60.0,
-    headers={"Authorization": f"Bearer {API_TOKEN}"},
-)
+if "access_token" not in st.session_state:
+    st.session_state.access_token = None
+if "user_email" not in st.session_state:
+    st.session_state.user_email = None
 
 
 def _error_detail(exc: httpx.HTTPStatusError) -> str:
@@ -45,6 +32,93 @@ def _error_detail(exc: httpx.HTTPStatusError) -> str:
         return exc.response.json().get("detail", exc.response.text)
     except ValueError:
         return exc.response.text
+
+
+def _show_login_screen() -> None:
+    st.title("FeedMe")
+    login_tab, register_tab = st.tabs(["Log in", "Register"])
+
+    with login_tab:
+        with st.form("login_form"):
+            email = st.text_input("Email")
+            password = st.text_input("Password", type="password")
+            if st.form_submit_button("Log in"):
+                try:
+                    response = httpx.post(
+                        f"{API_BASE_URL}/auth/login",
+                        json={"email": email, "password": password},
+                        timeout=30,
+                    )
+                    response.raise_for_status()
+                except httpx.HTTPStatusError as exc:
+                    st.error(_error_detail(exc))
+                except httpx.HTTPError as exc:
+                    st.error(f"Request failed: {exc}")
+                else:
+                    st.session_state.access_token = response.json()["access_token"]
+                    st.session_state.user_email = email
+                    st.rerun()
+
+    with register_tab:
+        with st.form("register_form"):
+            email = st.text_input("Email", key="register_email")
+            password = st.text_input("Password", type="password", key="register_password")
+            registration_code = st.text_input("Registration code")
+            if st.form_submit_button("Register"):
+                try:
+                    response = httpx.post(
+                        f"{API_BASE_URL}/auth/register",
+                        json={
+                            "email": email,
+                            "password": password,
+                            "registration_code": registration_code,
+                        },
+                        timeout=30,
+                    )
+                    response.raise_for_status()
+                except httpx.HTTPStatusError as exc:
+                    st.error(_error_detail(exc))
+                except httpx.HTTPError as exc:
+                    st.error(f"Request failed: {exc}")
+                else:
+                    st.session_state.access_token = response.json()["access_token"]
+                    st.session_state.user_email = email
+                    st.rerun()
+
+
+if not st.session_state.access_token:
+    _show_login_screen()
+    st.stop()
+
+
+def _handle_response(response: httpx.Response) -> None:
+    # Global 401 handler: an expired or invalidated token drops the user
+    # back to the login screen, instead of every call site below needing
+    # its own expiry check.
+    if response.status_code == 401:
+        st.session_state.access_token = None
+        st.session_state.user_email = None
+        st.rerun()
+
+
+client = httpx.Client(
+    base_url=API_BASE_URL,
+    timeout=60.0,
+    headers={"Authorization": f"Bearer {st.session_state.access_token}"},
+    event_hooks={"response": [_handle_response]},
+)
+
+st.title("FeedMe")
+header_cols = st.columns([5, 1])
+with header_cols[0]:
+    # Code span, not an f-string with the raw address - otherwise Streamlit's
+    # markdown renderer autolinks the email into a clickable mailto: link.
+    st.caption(f"Logged in as `{st.session_state.user_email}`")
+with header_cols[1]:
+    if st.button("Log out"):
+        st.session_state.access_token = None
+        st.session_state.user_email = None
+        st.rerun()
 
 
 def _ingredients_to_text(ingredients: list[dict]) -> str:
