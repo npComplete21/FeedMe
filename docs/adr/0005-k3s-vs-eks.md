@@ -1,6 +1,9 @@
 # ADR 0005: k3s vs EKS for the Phase 3 deployment target
 
-Status: Proposed — not yet decided, revisit when Phase 3 starts
+Status: Superseded by [ADR-0016](0016-oracle-cloud-k3s-over-aws.md) — a cost analysis widened the
+question beyond "which AWS option" to "which cloud at all," and Oracle Cloud's Always Free tier won
+on cost while still landing on k3s either way. Kept here for the EKS-vs-k3s reasoning, which remains
+the relevant comparison if this project ever does move to AWS.
 
 ## Context
 

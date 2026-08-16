@@ -56,20 +56,21 @@ second API call when echoed back as conversation history.
 
 **Phase 2 complete.**
 
-## Phase 3 — Ship to AWS / k8s
+## Phase 3 — Ship to Oracle Cloud / k3s
 
-**Reordered: Phase 4's multi-user auth is being done first** (see below) — the AWS/k8s decision
-stalled on an open question (k3s vs EKS, real cost either way) while exploring free-hosting
-alternatives for a small (~50 user) deployment. Auth doesn't depend on that decision, so no reason
-to block it. Revisit this phase once a hosting target is actually chosen.
+Hosting decided: Oracle Cloud's Always Free tier (Ampere A1, up to 4 OCPU/24GB RAM, free forever),
+running k3s, chosen over AWS on cost (see [ADR-0016](adr/0016-oracle-cloud-k3s-over-aws.md),
+supersedes [ADR-0005](adr/0005-k3s-vs-eks.md)).
 
-- [ ] Decide EKS vs k3s (see [ADR-0005](adr/0005-k3s-vs-eks.md) — currently **proposed**, not yet decided)
-- [ ] ECR for images
-- [ ] Kubernetes manifests or Helm chart — Deployment/Service/Ingress for API, worker
-- [ ] RDS Postgres (or in-cluster Postgres, depending on ADR-0005 outcome)
-- [ ] Secrets for API keys, ConfigMap for env
-- [ ] GitHub Actions — build, push, deploy on merge to main
-- [ ] TLS via cert-manager + Route53
+- [ ] 3.1 Oracle Cloud account + Always Free Ampere A1 instance provisioned
+- [ ] 3.2 Networking — VCN, subnet, security rules, reserved public IP, SSH access
+- [ ] 3.3 Install k3s on the instance
+- [ ] 3.4 Build `arm64` images and get them onto the node (registry or direct build)
+- [ ] 3.5 Kubernetes manifests — Deployment/Service for db, redis, api, worker, ui; PVC for Postgres
+- [ ] 3.6 Secrets (API keys, JWT secret, registration code) as Kubernetes Secrets
+- [ ] 3.7 Domain + Ingress + TLS via cert-manager/Let's Encrypt
+- [ ] 3.8 GitHub Actions — build, push, deploy on merge to main
+- [ ] 3.9 Verify live — real domain, real TLS, all 50-user-scale checks passing
 
 ## Phase 4 — Multi-user + polish
 
