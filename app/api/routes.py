@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.auth import InvalidTokenError, create_task_token, decode_task_token
 from app.api.converters import recipe_to_response
 from app.api.deps import get_current_user_id, get_db
 from app.api.schemas import (
@@ -50,12 +51,27 @@ def ingest_recipe(
             user_id, payload.url, payload.caption_text, payload.source_platform
         )
 
-    return IngestAcceptedResponse(task_id=result.id)
+    # Signed rather than raw: Celery's result backend has no notion of who
+    # owns a task, so the token is what lets ingest_status below prove it.
+    return IngestAcceptedResponse(task_id=create_task_token(result.id, user_id))
 
 
 @router.get("/recipes/ingest/{task_id}", response_model=IngestStatusResponse)
-def ingest_status(task_id: str) -> IngestStatusResponse:
-    result = AsyncResult(task_id, app=celery_app)
+def ingest_status(
+    task_id: str,
+    user_id: int = Depends(get_current_user_id),
+) -> IngestStatusResponse:
+    try:
+        celery_task_id, owner_id = decode_task_token(task_id)
+    except InvalidTokenError:
+        raise HTTPException(status_code=404, detail="Task not found") from None
+
+    # 404 rather than 403 - confirming "this task exists but isn't yours" would
+    # itself leak that someone else's ingestion is in flight.
+    if owner_id != user_id:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    result = AsyncResult(celery_task_id, app=celery_app)
 
     if result.successful():
         return IngestStatusResponse(state="success", recipe=RecipeResponse(**result.result))

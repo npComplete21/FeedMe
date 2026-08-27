@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 
+from app.api.auth import create_access_token, create_task_token, decode_task_token
 from app.api.converters import recipe_to_response
 from app.models import Ingredient, Recipe, RecipeIngredient
 
@@ -45,7 +46,7 @@ def test_ingest_recipe_youtube_enqueues_task(client, monkeypatch, db_session, te
     )
 
     assert response.status_code == 202
-    assert response.json() == {"task_id": "task-abc"}
+    assert decode_task_token(response.json()["task_id"]) == ("task-abc", test_user_id)
     fake_task.delay.assert_called_once_with(test_user_id, "https://youtube.com/watch?v=abc")
 
 
@@ -75,34 +76,49 @@ def test_ingest_recipe_manual_enqueues_task_with_caption(
     )
 
     assert response.status_code == 202
-    assert response.json() == {"task_id": "task-xyz"}
+    assert decode_task_token(response.json()["task_id"]) == ("task-xyz", test_user_id)
     fake_task.delay.assert_called_once_with(
         test_user_id, "https://instagram.com/reel/abc", "1 cup rice", "instagram"
     )
 
 
-def test_ingest_status_pending(client, monkeypatch):
+def _fake_async_result(monkeypatch, *, successful=False, failed=False, result=None):
+    """Stubs the Celery result lookup and records which task id it was asked for,
+    so tests can assert the route unwrapped the signed token before querying."""
     fake_result = MagicMock()
-    fake_result.successful.return_value = False
-    fake_result.failed.return_value = False
-    monkeypatch.setattr("app.api.routes.AsyncResult", lambda task_id, app: fake_result)
+    fake_result.successful.return_value = successful
+    fake_result.failed.return_value = failed
+    fake_result.result = result
+    seen = {}
 
-    response = client.get("/recipes/ingest/some-task-id")
+    def _factory(task_id, app):
+        seen["task_id"] = task_id
+        return fake_result
+
+    monkeypatch.setattr("app.api.routes.AsyncResult", _factory)
+    return seen
+
+
+def test_ingest_status_pending(client, monkeypatch, test_user_id):
+    seen = _fake_async_result(monkeypatch)
+    token = create_task_token("celery-task-1", test_user_id)
+
+    response = client.get(f"/recipes/ingest/{token}")
 
     assert response.status_code == 200
     assert response.json() == {"state": "pending", "recipe": None, "error": None}
+    # The raw Celery id is what reached the result backend, not the signed token.
+    assert seen["task_id"] == "celery-task-1"
 
 
 def test_ingest_status_success_returns_recipe(client, monkeypatch, db_session, test_user_id):
     recipe = _make_recipe(db_session, test_user_id, title="Fried Rice", ingredients=["rice"])
+    _fake_async_result(
+        monkeypatch, successful=True, result=recipe_to_response(recipe).model_dump(mode="json")
+    )
+    token = create_task_token("celery-task-1", test_user_id)
 
-    fake_result = MagicMock()
-    fake_result.successful.return_value = True
-    fake_result.failed.return_value = False
-    fake_result.result = recipe_to_response(recipe).model_dump(mode="json")
-    monkeypatch.setattr("app.api.routes.AsyncResult", lambda task_id, app: fake_result)
-
-    response = client.get("/recipes/ingest/some-task-id")
+    response = client.get(f"/recipes/ingest/{token}")
 
     assert response.status_code == 200
     body = response.json()
@@ -111,20 +127,55 @@ def test_ingest_status_success_returns_recipe(client, monkeypatch, db_session, t
     assert body["error"] is None
 
 
-def test_ingest_status_failure_returns_error(client, monkeypatch):
-    fake_result = MagicMock()
-    fake_result.successful.return_value = False
-    fake_result.failed.return_value = True
-    fake_result.result = ValueError("No captions available for this video")
-    monkeypatch.setattr("app.api.routes.AsyncResult", lambda task_id, app: fake_result)
+def test_ingest_status_failure_returns_error(client, monkeypatch, test_user_id):
+    _fake_async_result(
+        monkeypatch, failed=True, result=ValueError("No captions available for this video")
+    )
+    token = create_task_token("celery-task-1", test_user_id)
 
-    response = client.get("/recipes/ingest/some-task-id")
+    response = client.get(f"/recipes/ingest/{token}")
 
     assert response.status_code == 200
     body = response.json()
     assert body["state"] == "failure"
     assert "No captions available" in body["error"]
     assert body["recipe"] is None
+
+
+def test_ingest_status_rejects_another_users_task(client, monkeypatch, test_user_id):
+    """The whole point of the signed token: a task enqueued by someone else is
+    not readable even though the caller is perfectly well authenticated."""
+    seen = _fake_async_result(monkeypatch, successful=True, result={})
+    someone_else = create_task_token("celery-task-1", test_user_id + 1)
+
+    response = client.get(f"/recipes/ingest/{someone_else}")
+
+    assert response.status_code == 404
+    # Never even reached the result backend.
+    assert seen == {}
+
+
+def test_ingest_status_rejects_raw_celery_id(client, monkeypatch):
+    """A bare task id - which is what the old API handed out - is no longer a
+    valid poll key, since it carries no proof of ownership."""
+    seen = _fake_async_result(monkeypatch, successful=True, result={})
+
+    response = client.get("/recipes/ingest/some-raw-task-id")
+
+    assert response.status_code == 404
+    assert seen == {}
+
+
+def test_ingest_status_rejects_an_access_token(client, monkeypatch, test_user_id):
+    """Both token kinds are signed with the same secret, so the `typ` claim is
+    the only thing stopping a login token being replayed here."""
+    seen = _fake_async_result(monkeypatch, successful=True, result={})
+    access_token = create_access_token(test_user_id)
+
+    response = client.get(f"/recipes/ingest/{access_token}")
+
+    assert response.status_code == 404
+    assert seen == {}
 
 
 def test_list_recipes_scoped_to_current_user(client, db_session, test_user_id):
