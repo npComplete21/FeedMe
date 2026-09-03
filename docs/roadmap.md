@@ -65,8 +65,12 @@ supersedes [ADR-0005](adr/0005-k3s-vs-eks.md)).
 - [ ] 3.1 Oracle Cloud account + Always Free Ampere A1 instance provisioned
 - [ ] 3.2 Networking — VCN, subnet, security rules, reserved public IP, SSH access
 - [ ] 3.3 Install k3s on the instance
-- [ ] 3.4 Build `arm64` images and get them onto the node (registry or direct build)
-- [ ] 3.5 Kubernetes manifests — Deployment/Service for db, redis, api, worker, ui; PVC for Postgres
+- [ ] 3.4 Get images onto the node (registry or direct import) — the `arm64` half is already
+  satisfied: the dev machine is Apple Silicon, so `docker compose build` already produces
+  `linux/arm64` images matching Ampere A1. No cross-compilation needed.
+- [x] 3.5 Kubernetes manifests — Deployment/Service for db, redis, api, worker, ui; PVC for
+  Postgres (see [ADR-0018](adr/0018-kubernetes-manifest-shape.md)). Written in `k8s/`, rendered
+  and cross-checked offline; first apply against a real API server happens with 3.3.
 - [ ] 3.6 Secrets (API keys, JWT secret, registration code) as Kubernetes Secrets
 - [ ] 3.7 Domain + Ingress + TLS via cert-manager/Let's Encrypt
 - [ ] 3.8 GitHub Actions — build, push, deploy on merge to main

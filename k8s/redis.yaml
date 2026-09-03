@@ -1,0 +1,59 @@
+# Redis: Celery's broker (job queue) and result backend.
+#
+# Deliberately no PersistentVolumeClaim, matching docker-compose.yml. Everything
+# here is derived state - queued jobs and task results - so losing it on a
+# restart costs at most an in-flight ingestion. "Was my recipe saved?" is always
+# answered by Postgres, never by Redis.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      securityContext:
+        runAsUser: 999          # the redis user in the official image
+        runAsGroup: 1000
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+spec:
+  type: ClusterIP             # internal only - as with db, the Compose
+                              # `ports: "6379:6379"` is not carried over
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+      targetPort: 6379

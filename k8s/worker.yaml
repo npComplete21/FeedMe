@@ -1,0 +1,58 @@
+# Celery worker: runs ingestion (yt-dlp fetch + Claude parse) off the request
+# thread. No Service - nothing ever connects TO it; it pulls work from Redis.
+#
+# Deliberately no `alembic upgrade head` anywhere in here. The api pod owns
+# schema changes (ADR-0012), so there is exactly one migrator no matter how
+# many workers run.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      securityContext:
+        runAsUser: 10001        # appuser, per docker/worker.Dockerfile
+        runAsGroup: 10001
+      containers:
+        - name: worker
+          image: feedme-worker:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: REDIS_URL
+              value: redis://redis:6379/0
+            # Named individually rather than envFrom-ing the whole Secret:
+            # app.worker's import chain never reaches app.api.auth, so the
+            # worker has no use for JWT_SECRET_KEY or FEEDME_REGISTRATION_CODE.
+            # Compose hands it all of them via env_file; there is no reason to
+            # repeat that here.
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: feedme-secrets
+                  key: DATABASE_URL
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: feedme-secrets
+                  key: ANTHROPIC_API_KEY
+          # No probes. A worker exposes no port, and the obvious liveness check
+          # (`celery inspect ping`) is slow and prone to false negatives under
+          # load - it would restart healthy workers mid-ingestion. Celery's own
+          # retry handling (app/worker.py) covers the failure mode that matters.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              # Higher than the api's: yt-dlp buffers transcripts and the
+              # Anthropic client holds the full response in memory.
+              memory: 1Gi

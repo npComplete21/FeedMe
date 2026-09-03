@@ -1,0 +1,119 @@
+# Postgres. One Compose service becomes three Kubernetes objects, because each
+# has a different lifecycle: the data must outlive the pod, and the DNS name
+# must outlive both.
+---
+# 1. THE DISK. Requested independently of anything that uses it, so that
+#    deleting the Deployment below - or having Kubernetes reschedule the pod -
+#    does not touch the data. This is the Compose `volumes: pgdata` line, made
+#    into a first-class object.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: db-data
+spec:
+  accessModes:
+    - ReadWriteOnce        # one node may mount it - fine, there is only one node
+  resources:
+    requests:
+      storage: 10Gi        # of the 200GB the Always Free tier allows
+---
+# 2. THE WORKLOAD. "Keep exactly one Postgres pod alive, and if it dies,
+#    recreate it." A Deployment does not run containers itself: it manages a
+#    ReplicaSet, which manages Pods. A Pod is the actual unit that gets
+#    scheduled onto a node.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db
+spec:
+  replicas: 1
+  strategy:
+    # Default is RollingUpdate, which briefly runs old and new pods together.
+    # That cannot work here: two Postgres processes cannot mount one
+    # ReadWriteOnce volume, and would corrupt it if they could. Recreate takes
+    # the old pod fully down first, at the cost of a few seconds of downtime.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: db
+  template:
+    metadata:
+      labels:
+        app: db            # <- the Service below finds pods by THIS label
+    spec:
+      securityContext:
+        runAsUser: 999     # the postgres user inside the official image
+        runAsGroup: 999
+        fsGroup: 999       # makes the mounted volume group-writable by postgres
+      containers:
+        - name: postgres
+          image: postgres:16
+          env:
+            - name: POSTGRES_USER
+              value: feedme
+            - name: POSTGRES_DB
+              value: feedme
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: feedme-secrets
+                  key: POSTGRES_PASSWORD
+            # Postgres refuses to initialise into a directory that isn't empty,
+            # and many storage backends drop a lost+found into a fresh volume.
+            # Pointing PGDATA at a subdirectory sidesteps that entirely.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          # Compose's healthcheck splits in two here, and the halves mean
+          # different things:
+          readinessProbe:
+            # "should traffic be sent to this pod yet?" - this is the one that
+            # replaces `depends_on: condition: service_healthy`. The api and
+            # worker pods will crash-loop until this reports ready.
+            exec:
+              command: ["pg_isready", "-U", "feedme"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            # "is this pod wedged and in need of a kill?" - deliberately far
+            # more forgiving than readiness. An aggressive liveness probe on a
+            # database is a way to turn slow recovery into a restart loop.
+            exec:
+              command: ["pg_isready", "-U", "feedme"]
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 6
+          resources:
+            # Requests are what the scheduler reserves; limits are the hard cap.
+            # Worth setting even on a 4-OCPU/24GB node so one runaway service
+            # cannot starve the other four.
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: db-data
+---
+# 3. THE NAME. Pods get new IPs every restart, so nothing addresses them
+#    directly. This gives them one stable DNS name - `db` - which is exactly
+#    the hostname already baked into DATABASE_URL. No app code changes.
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+spec:
+  type: ClusterIP          # internal only. NOT reachable from the internet -
+                           # this is the Compose `ports: "5432:5432"` line
+                           # deliberately NOT carried over.
+  selector:
+    app: db                # matches the pod label above; that is the whole glue
+  ports:
+    - port: 5432
+      targetPort: 5432

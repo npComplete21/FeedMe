@@ -1,0 +1,7 @@
+# Keeps every FeedMe object in one namespace, so the stack can be inspected -
+# or torn down - without touching anything else k3s is running (its own
+# CoreDNS, Traefik, metrics-server all live in kube-system).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: feedme

@@ -7,3 +7,4 @@ __pycache__/
 *.egg-info/
 .idea/
 docs/api-key.txt
+k8s/secrets.yaml

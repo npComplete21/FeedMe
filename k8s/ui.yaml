@@ -1,0 +1,66 @@
+# Streamlit UI. A thin HTTP client over the API (ADR-0004) - it holds no
+# credentials of its own and gets a per-user token at runtime from
+# /auth/login (ADR-0015).
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ui
+  template:
+    metadata:
+      labels:
+        app: ui
+    spec:
+      securityContext:
+        runAsUser: 10001        # appuser, per docker/ui.Dockerfile
+        runAsGroup: 10001
+      containers:
+        - name: ui
+          image: feedme-ui:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            # The only wiring this service needs. Note the total absence of an
+            # envFrom/secretRef: the UI gets no secrets at all, which is the
+            # property ADR-0012 and ADR-0015 were after. Worth keeping true.
+            - name: FEEDME_API_URL
+              value: http://api:8000
+          ports:
+            - containerPort: 8501
+          readinessProbe:
+            httpGet:
+              path: /_stcore/health     # Streamlit's own health endpoint
+              port: 8501
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /_stcore/health
+              port: 8501
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              # Streamlit drags in pandas/numpy/pyarrow - the fattest image of
+              # the three at ~800MB, and correspondingly hungry at runtime.
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ui
+spec:
+  type: ClusterIP           # exposed to the world by the Ingress in 3.7
+  selector:
+    app: ui
+  ports:
+    - port: 8501
+      targetPort: 8501

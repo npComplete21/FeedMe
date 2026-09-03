@@ -1,0 +1,112 @@
+# FastAPI backend. The only service that owns schema changes (ADR-0012).
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      securityContext:
+        runAsUser: 10001        # appuser, the uid pinned in docker/api.Dockerfile
+        runAsGroup: 10001
+      # Migrations move OUT of the container CMD and into an init container.
+      # Same image, same command as the Dockerfile ran - but Kubernetes
+      # guarantees it runs to completion before the app container starts, and
+      # runs once per pod rather than racing if replicas is ever raised above 1.
+      initContainers:
+        - name: migrate
+          image: feedme-api:latest
+          imagePullPolicy: IfNotPresent
+          command: ["alembic", "upgrade", "head"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: feedme-secrets
+                  key: DATABASE_URL
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+      containers:
+        - name: api
+          image: feedme-api:latest
+          # Required, not cosmetic: the default for a `latest` tag is Always,
+          # which makes k3s try to pull from Docker Hub and fail for an image
+          # that was side-loaded onto the node (roadmap 3.4).
+          imagePullPolicy: IfNotPresent
+          # Overrides the Dockerfile CMD, which also ran alembic. That job now
+          # belongs to the init container above.
+          command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+          env:
+            # Not a secret - no credentials in it, and it documents the wiring.
+            - name: REDIS_URL
+              value: redis://redis:6379/0
+            # Named individually rather than envFrom-ing the whole Secret, so
+            # the pod never sees POSTGRES_PASSWORD - only the db pod needs that.
+            # The API is the only service that needs all four of these.
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: feedme-secrets
+                  key: DATABASE_URL
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: feedme-secrets
+                  key: ANTHROPIC_API_KEY
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: feedme-secrets
+                  key: JWT_SECRET_KEY
+            - name: FEEDME_REGISTRATION_CODE
+              valueFrom:
+                secretKeyRef:
+                  name: feedme-secrets
+                  key: FEEDME_REGISTRATION_CODE
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 768Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  # ClusterIP even though this is public-facing: the Ingress (roadmap 3.7) is
+  # what terminates TLS and routes in from outside. Nothing binds a node port.
+  type: ClusterIP
+  selector:
+    app: api
+  ports:
+    - port: 8000
+      targetPort: 8000

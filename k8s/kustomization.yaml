@@ -1,0 +1,27 @@
+# Lets the whole stack go up with `kubectl apply -k k8s/` instead of five
+# separate -f flags, and gives 3.8's CI/CD a single place to rewrite image tags
+# (`kustomize edit set image feedme-api=...:$GIT_SHA`) rather than sed-ing YAML.
+#
+# secrets.example.yaml is deliberately NOT listed - the real Secret is created
+# against the cluster directly, not applied from this directory.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: feedme
+
+resources:
+  - namespace.yaml
+  - db.yaml
+  - redis.yaml
+  - api.yaml
+  - worker.yaml
+  - ui.yaml
+
+# Applied to every object above, so `kubectl get all -l app.kubernetes.io/part-of=feedme`
+# finds the whole stack and nothing else on the node. includeSelectors:false
+# deliberately - baking an extra label into a Deployment's selector makes it
+# immutable and awkward to change later; the app: <name> selectors are enough.
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: feedme
+    includeSelectors: false
