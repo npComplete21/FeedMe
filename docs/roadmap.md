@@ -74,7 +74,12 @@ AWS on cost (see [ADR-0016](adr/0016-oracle-cloud-k3s-over-aws.md), supersedes
   single boundary (see [ADR-0019](adr/0019-single-firewall-layer-on-the-node.md)).
   **Outstanding:** the public IP is still ephemeral — convert to reserved before pointing DNS at
   it in 3.7.
-- [ ] 3.3 Install k3s on the instance
+- [x] 3.3 Install k3s on the instance — v1.36.4+k3s1, node Ready, `k3s-selinux` installed
+  automatically so SELinux stays Enforcing. Bundled Traefik kept as the ingress controller for
+  3.7; `local-path` is the default StorageClass that 3.5's PVC will bind to. `kubectl` works from
+  the dev machine over an SSH tunnel (see CLAUDE.md) with 6443 still closed to the internet, and
+  **3.5's manifests now validate clean against a real API server** (`kubectl apply -k k8s/
+  --dry-run=server`), which was the outstanding gap from that step.
 - [ ] 3.4 Get images onto the node (registry or direct import) — the `arm64` half is already
   satisfied: the dev machine is Apple Silicon, so `docker compose build` already produces
   `linux/arm64` images matching Ampere A1. No cross-compilation needed.

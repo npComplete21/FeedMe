@@ -67,6 +67,41 @@ in `.env` — generate with `python -c "import secrets; print(secrets.token_hex(
 own login/register screen — log in once per browser session, no token to enter by hand. `curl`/`httpie`
 calls against the API directly need to call `/auth/login` first and pass the returned token.
 
+## Deployment (Phase 3, in progress)
+
+Single-node k3s cluster on an Oracle Cloud Always Free Ampere A1 instance (see
+[ADR-0016](docs/adr/0016-oracle-cloud-k3s-over-aws.md)). Manifests live in `k8s/`, applied with
+`kubectl apply -k k8s/` (see [ADR-0018](docs/adr/0018-kubernetes-manifest-shape.md)).
+
+```
+ssh opc@132.145.213.150                             # the node; key is ~/.ssh/feedme_oracle
+```
+
+The key is passphrase-protected. It is loaded into the macOS keychain-backed ssh-agent, so it should
+just work; if SSH starts failing with `Permission denied (publickey)` while `ssh -v` says
+`Server accepts key`, the agent has lost it - re-add with:
+
+```
+ssh-add --apple-use-keychain ~/.ssh/feedme_oracle
+```
+
+**The Kubernetes API is deliberately not exposed to the internet** - the OCI security list allows
+only 22, 80 and 443 (see [ADR-0019](docs/adr/0019-single-firewall-layer-on-the-node.md)). `kubectl`
+from this machine reaches it through an SSH tunnel:
+
+```
+ssh -f -N -L 6443:127.0.0.1:6443 opc@132.145.213.150   # open the tunnel (once per reboot)
+export KUBECONFIG=~/.kube/feedme.yaml                   # k3s config, rewritten to 127.0.0.1
+kubectl get pods -A
+```
+
+If `kubectl` hangs or reports `connection refused`, the tunnel has dropped - re-run the `ssh -f -N`
+line. On the node itself, `kubectl` works directly (`KUBECONFIG=/etc/rancher/k3s/k3s.yaml`); note
+`sudo k3s` fails there because `/usr/local/bin` is not on sudo's `secure_path`.
+
+Traefik ships with k3s and is the ingress controller (3.7). It already answers on 80/443 from the
+public IP, returning 404 until Ingress routes exist.
+
 ## Architecture at a glance
 
 FastAPI backend (`app/api`, `app/ingestion`, `app/parsing`, `app/persistence`, `app/matching`) +
