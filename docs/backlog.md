@@ -24,3 +24,13 @@ bullet point six months from now).
   imports. If the allowed values change often enough that this becomes annoying, consider a shared
   constants module both sides can depend on without pulling in `anthropic`/`sqlalchemy`.
   *Noted: 2026-07-17, during Phase 1.2.*
+
+- [ ] **Block pod egress to the OCI metadata service (`169.254.169.254`).** Any process on the k3s
+  node — including any container — can reach the instance metadata endpoint, which returns instance
+  identity and, where configured, credentials. This is the standard SSRF-to-cloud-metadata exposure,
+  and in a Kubernetes context a compromised pod is exactly the attacker that benefits. Not introduced
+  by us (Oracle's shipped `OUTPUT` rules already ACCEPTed `169.254.169.254:80` for all users), but
+  disabling `firewalld` during Phase 3.2 flushed the chain that had REJECTed the *rest* of
+  `169.254.0.0/16`, so the surface is now slightly wider. Host-level `OUTPUT` rules are the wrong fix
+  here — the right control is a Kubernetes NetworkPolicy denying pod egress to `169.254.0.0/16`,
+  applied once the cluster is up. *Noted: 2026-09-24, during Phase 3.2.*

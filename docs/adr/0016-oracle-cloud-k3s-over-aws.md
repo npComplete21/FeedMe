@@ -2,6 +2,14 @@
 
 Status: Accepted — supersedes [ADR-0005](0005-k3s-vs-eks.md)
 
+> **Amended 2026-09-24.** Oracle halved the Always Free Ampere A1 allowance from 4 OCPU / 24GB to
+> **2 OCPU / 12GB** on 2026-06-15, without announcement. The "4 OCPUs / 24GB" figure in the
+> Context below is no longer accurate. The decision stands: the provisioned node is 2 OCPU /
+> 12GB (10GB usable) and the full stack needs roughly 6GB including k3s and the OS, so it still
+> fits with headroom. Cost is still $0/mo. Pay-As-You-Go accounts reportedly retain the old
+> allowance, but Oracle has not confirmed this publicly and it carries billing risk, so it was
+> not pursued.
+
 ## Context
 
 [ADR-0005](0005-k3s-vs-eks.md) framed Phase 3's decision as "k3s vs EKS," implicitly assuming AWS as

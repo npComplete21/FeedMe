@@ -58,12 +58,22 @@ second API call when echoed back as conversation history.
 
 ## Phase 3 — Ship to Oracle Cloud / k3s
 
-Hosting decided: Oracle Cloud's Always Free tier (Ampere A1, up to 4 OCPU/24GB RAM, free forever),
-running k3s, chosen over AWS on cost (see [ADR-0016](adr/0016-oracle-cloud-k3s-over-aws.md),
-supersedes [ADR-0005](adr/0005-k3s-vs-eks.md)).
+Hosting decided: Oracle Cloud's Always Free tier (Ampere A1, **2 OCPU/12GB** since 2026-06-15 —
+Oracle halved it from 4/24 without announcement; the stack still fits), running k3s, chosen over
+AWS on cost (see [ADR-0016](adr/0016-oracle-cloud-k3s-over-aws.md), supersedes
+[ADR-0005](adr/0005-k3s-vs-eks.md)).
 
-- [ ] 3.1 Oracle Cloud account + Always Free Ampere A1 instance provisioned
-- [ ] 3.2 Networking — VCN, subnet, security rules, reserved public IP, SSH access
+- [x] 3.1 Oracle Cloud account + Always Free Ampere A1 instance provisioned — `VM.Standard.A1.Flex`,
+  2 OCPU / 12GB (10GB usable), 30GB disk, Oracle Linux 9.8 `aarch64`, SSH as `opc` with
+  `~/.ssh/feedme_oracle`. Note the free-tier ARM allowance was **halved to 2 OCPU / 12GB** on
+  2026-06-15; the 4 OCPU/24GB figure in [ADR-0016](adr/0016-oracle-cloud-k3s-over-aws.md) predates
+  that. The stack still fits comfortably (~6GB of the 12GB ceiling).
+- [x] 3.2 Networking — public subnet in `feedme-vcn`; OCI security list allows 22/80/443 inbound
+  and nothing else (6443 verified filtered, so the Kubernetes API is not internet-facing);
+  host `firewalld` disabled per k3s's guidance for RHEL-family, leaving the security list as the
+  single boundary (see [ADR-0019](adr/0019-single-firewall-layer-on-the-node.md)).
+  **Outstanding:** the public IP is still ephemeral — convert to reserved before pointing DNS at
+  it in 3.7.
 - [ ] 3.3 Install k3s on the instance
 - [ ] 3.4 Get images onto the node (registry or direct import) — the `arm64` half is already
   satisfied: the dev machine is Apple Silicon, so `docker compose build` already produces
