@@ -34,3 +34,13 @@ bullet point six months from now).
   `169.254.0.0/16`, so the surface is now slightly wider. Host-level `OUTPUT` rules are the wrong fix
   here — the right control is a Kubernetes NetworkPolicy denying pod egress to `169.254.0.0/16`,
   applied once the cluster is up. *Noted: 2026-09-24, during Phase 3.2.*
+
+- [ ] **Finish the Postgres backup path — `BACKUP_PAR_URL` is not set yet.** `k8s/backup.yaml`
+  deploys a nightly CronJob (03:00 UTC) that dumps Postgres and uploads it off-node, but it
+  references a `BACKUP_PAR_URL` key that does not exist in the `feedme-secrets` Secret, so every run
+  fails at container creation until it is added. Remaining steps: create an Object Storage bucket
+  (`feedme-backups`) and a **Bucket**-type pre-authenticated request with **object writes only**
+  (write-only on purpose — a compromised node then cannot read or delete existing backups), add the
+  PAR URL to the Secret, trigger a manual run, and **test an actual restore** rather than assuming
+  the dump is good. Also worth an ADR once it works, and note PARs expire: when it does, backups
+  fail silently. *Noted: 2026-09-24, during Phase 3.7.*
