@@ -80,13 +80,24 @@ AWS on cost (see [ADR-0016](adr/0016-oracle-cloud-k3s-over-aws.md), supersedes
   the dev machine over an SSH tunnel (see CLAUDE.md) with 6443 still closed to the internet, and
   **3.5's manifests now validate clean against a real API server** (`kubectl apply -k k8s/
   --dry-run=server`), which was the outstanding gap from that step.
-- [ ] 3.4 Get images onto the node (registry or direct import) — the `arm64` half is already
-  satisfied: the dev machine is Apple Silicon, so `docker compose build` already produces
-  `linux/arm64` images matching Ampere A1. No cross-compilation needed.
+- [x] **Stack deployed and verified live on the cluster** — all five pods 1/1 with zero restarts,
+  PVC bound, migrations applied by the init container. Full loop exercised against the real
+  cluster: register → ingest a caption → Redis → worker → Claude → Postgres → match. Data and
+  accounts survive destroying the `db` pod. Reachable only in-cluster so far; 3.7 adds the
+  public route.
+- [x] 3.4 Get images onto the node — direct import (`docker save | gzip | ssh | k3s ctr images
+  import`) rather than standing up a registry; that becomes necessary in 3.8 when CI needs it.
+  The `arm64` half was free: the dev machine is Apple Silicon, so `docker compose build` already
+  produces `linux/arm64`. Images land in containerd's `k8s.io` namespace as
+  `docker.io/library/feedme-{api,worker,ui}:latest`, which is what `imagePullPolicy: IfNotPresent`
+  resolves against.
 - [x] 3.5 Kubernetes manifests — Deployment/Service for db, redis, api, worker, ui; PVC for
   Postgres (see [ADR-0018](adr/0018-kubernetes-manifest-shape.md)). Written in `k8s/`, rendered
   and cross-checked offline; first apply against a real API server happens with 3.3.
-- [ ] 3.6 Secrets (API keys, JWT secret, registration code) as Kubernetes Secrets
+- [x] 3.6 Secrets as Kubernetes Secrets — `feedme-secrets` in the `feedme` namespace, created
+  imperatively so values never touch a file (see `k8s/secrets.example.yaml`). Postgres password,
+  JWT secret and registration code are freshly generated for production rather than copied from
+  the dev `.env`; only `ANTHROPIC_API_KEY` carries over.
 - [ ] 3.7 Domain + Ingress + TLS via cert-manager/Let's Encrypt
 - [ ] 3.8 GitHub Actions — build, push, deploy on merge to main
 - [ ] 3.9 Verify live — real domain, real TLS, all 50-user-scale checks passing
