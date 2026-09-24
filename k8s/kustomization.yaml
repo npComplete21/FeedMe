@@ -16,6 +16,7 @@ resources:
   - api.yaml
   - worker.yaml
   - ui.yaml
+  - ingress.yaml
 
 # Applied to every object above, so `kubectl get all -l app.kubernetes.io/part-of=feedme`
 # finds the whole stack and nothing else on the node. includeSelectors:false

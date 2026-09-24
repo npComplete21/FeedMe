@@ -1,0 +1,43 @@
+# The only route into the cluster from the internet.
+#
+# Deliberately exposes the UI and NOT the API. Streamlit renders server-side:
+# the browser only ever talks to the ui pod, which calls the api over the
+# cluster-internal Service (FEEDME_API_URL=http://api:8000). So the API needs no
+# public route for the app to work, and not having one is less surface. Adding
+# one later is a second rule pointing /api at svc/api port 8000 - worth doing if
+# you ever want to curl the API directly.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: feedme
+  annotations:
+    # Swap to letsencrypt-prod once staging has proven the flow end to end.
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - feedmepls.xyz
+        - www.feedmepls.xyz
+      secretName: feedme-tls      # cert-manager creates and renews this
+  rules:
+    - host: feedmepls.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ui
+                port:
+                  number: 8501
+    - host: www.feedmepls.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ui
+                port:
+                  number: 8501

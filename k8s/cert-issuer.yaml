@@ -1,0 +1,38 @@
+# Two issuers on purpose. Let's Encrypt's production endpoint rate-limits
+# *failed* validations (5 per hostname per hour), and a brand-new domain
+# mid-propagation is exactly when validation fails. Prove the whole flow works
+# against staging - which has far looser limits but issues untrusted certs -
+# then switch the Ingress annotation to prod for a real certificate.
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: yashpundlik@gmail.com
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      # HTTP-01: Let's Encrypt fetches http://<host>/.well-known/acme-challenge/<token>,
+      # which is why port 80 has to stay open at the OCI security list even once
+      # everything else is HTTPS.
+      - http01:
+          ingress:
+            ingressClassName: traefik
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: yashpundlik@gmail.com
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: traefik
