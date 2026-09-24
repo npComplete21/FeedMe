@@ -11,8 +11,13 @@ kind: Ingress
 metadata:
   name: feedme
   annotations:
-    # Swap to letsencrypt-prod once staging has proven the flow end to end.
-    cert-manager.io/cluster-issuer: letsencrypt-staging
+    # Staging proved the flow (cert issued with both SANs) before this was
+    # pointed at production, so no failed validations were spent against
+    # prod's 5-per-hostname-per-hour limit while DNS was still propagating.
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # <namespace>-<middleware-name>@kubernetescrd is Traefik's required
+    # naming for a Middleware defined as a CRD.
+    traefik.ingress.kubernetes.io/router.middlewares: feedme-redirect-https@kubernetescrd
 spec:
   ingressClassName: traefik
   tls:

@@ -1,0 +1,15 @@
+# Sends plain HTTP to HTTPS with a 301.
+#
+# This deliberately also redirects /.well-known/acme-challenge/. That is safe:
+# Let's Encrypt follows redirects during HTTP-01 validation and does not verify
+# the certificate on the redirected hop, so renewals keep working. Port 80 must
+# still stay open at the OCI security list for the same reason - the challenge
+# always starts over plain HTTP.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-https
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true

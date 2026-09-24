@@ -72,8 +72,7 @@ AWS on cost (see [ADR-0016](adr/0016-oracle-cloud-k3s-over-aws.md), supersedes
   and nothing else (6443 verified filtered, so the Kubernetes API is not internet-facing);
   host `firewalld` disabled per k3s's guidance for RHEL-family, leaving the security list as the
   single boundary (see [ADR-0019](adr/0019-single-firewall-layer-on-the-node.md)).
-  **Outstanding:** the public IP is still ephemeral — convert to reserved before pointing DNS at
-  it in 3.7.
+  The public IP was since reserved in place (OCI supports this without the address changing).
 - [x] 3.3 Install k3s on the instance — v1.36.4+k3s1, node Ready, `k3s-selinux` installed
   automatically so SELinux stays Enforcing. Bundled Traefik kept as the ingress controller for
   3.7; `local-path` is the default StorageClass that 3.5's PVC will bind to. `kubectl` works from
@@ -98,7 +97,11 @@ AWS on cost (see [ADR-0016](adr/0016-oracle-cloud-k3s-over-aws.md), supersedes
   imperatively so values never touch a file (see `k8s/secrets.example.yaml`). Postgres password,
   JWT secret and registration code are freshly generated for production rather than copied from
   the dev `.env`; only `ANTHROPIC_API_KEY` carries over.
-- [ ] 3.7 Domain + Ingress + TLS via cert-manager/Let's Encrypt
+- [x] 3.7 Domain + Ingress + TLS — `feedmepls.xyz` (Porkbun) and `www`, both A records at the
+  node's now-reserved IP. cert-manager v1.21.2 issues from Let's Encrypt production after
+  proving the flow against staging; Traefik terminates TLS and 301s HTTP to HTTPS. Verified
+  from the public internet (`ssl_verify_result=0`) and by logging into the live site in a
+  browser. See [ADR-0020](adr/0020-public-exposure-and-tls.md).
 - [ ] 3.8 GitHub Actions — build, push, deploy on merge to main
 - [ ] 3.9 Verify live — real domain, real TLS, all 50-user-scale checks passing
 

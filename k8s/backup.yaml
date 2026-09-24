@@ -1,0 +1,96 @@
+# Nightly logical backup of Postgres, pushed off-node to Oracle Object Storage.
+#
+# Why a pg_dump rather than a volume snapshot: the local-path provisioner backing
+# this cluster has no CSI snapshot support, so snapshots aren't available - but a
+# dump is the better artifact anyway. It restores into any Postgres, can be
+# inspected, and is kilobytes for this dataset.
+#
+# Why off-node: the database's PVC is a directory on this single node's disk, with
+# reclaimPolicy: Delete. A backup stored on that same disk protects against
+# exactly nothing that would realistically destroy the data - node termination,
+# disk loss, or an accidental `kubectl delete pvc`.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: db-backup
+spec:
+  schedule: "0 3 * * *"          # 03:00 UTC daily
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid       # never let a slow dump overlap the next one
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600   # still run if the node was down at 03:00
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsUser: 999
+            runAsGroup: 999
+            fsGroup: 999
+          volumes:
+            - name: scratch
+              emptyDir: {}
+          # postgres:16 has pg_dump but ships no curl/wget, and curlimages/curl
+          # has no pg_dump. Rather than build and ship a custom image for this,
+          # split the work across the two official ones over a shared emptyDir.
+          initContainers:
+            - name: dump
+              image: postgres:16
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  # DATABASE_URL is a SQLAlchemy URL; libpq doesn't understand
+                  # the +psycopg driver suffix, so strip it.
+                  PG_URL=$(printf '%s' "$DATABASE_URL" | sed 's|+psycopg||')
+                  pg_dump --no-owner --no-acl "$PG_URL" | gzip -9 > /scratch/dump.sql.gz
+                  echo "dumped $(stat -c %s /scratch/dump.sql.gz) bytes"
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: feedme-secrets
+                      key: DATABASE_URL
+              volumeMounts:
+                - name: scratch
+                  mountPath: /scratch
+              resources:
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {memory: 256Mi}
+          containers:
+            - name: upload
+              image: curlimages/curl:8.11.1
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  TS=$(date -u +%Y%m%dT%H%M%SZ)
+                  SIZE=$(stat -c %s /scratch/dump.sql.gz)
+                  # Guard against uploading a truncated or empty dump - an empty
+                  # gzip is ~20 bytes, and a real dump of even an empty schema is
+                  # far larger. Failing loudly beats storing a useless backup.
+                  if [ "$SIZE" -lt 200 ]; then
+                    echo "refusing to upload: dump is only ${SIZE} bytes" >&2
+                    exit 1
+                  fi
+                  # BACKUP_PAR_URL is an OCI pre-authenticated request ending in
+                  # /o/ - appending the object name PUTs it into the bucket.
+                  curl -fsS --retry 3 --retry-delay 5 \
+                       -X PUT --upload-file /scratch/dump.sql.gz \
+                       "${BACKUP_PAR_URL}feedme-${TS}.sql.gz"
+                  echo "uploaded feedme-${TS}.sql.gz (${SIZE} bytes)"
+              env:
+                - name: BACKUP_PAR_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: feedme-secrets
+                      key: BACKUP_PAR_URL
+              volumeMounts:
+                - name: scratch
+                  mountPath: /scratch
+              resources:
+                requests: {cpu: 50m, memory: 32Mi}
+                limits: {memory: 128Mi}
