@@ -99,6 +99,24 @@ If `kubectl` hangs or reports `connection refused`, the tunnel has dropped - re-
 line. On the node itself, `kubectl` works directly (`KUBECONFIG=/etc/rancher/k3s/k3s.yaml`); note
 `sudo k3s` fails there because `/usr/local/bin` is not on sudo's `secure_path`.
 
+**Deploying a change today is manual** (3.8 will automate it). From the repo root, with Docker
+running:
+
+```
+docker compose build api worker ui                        # only the images that changed
+docker save feedme-api:latest feedme-worker:latest | gzip -1 \
+  | ssh opc@132.145.213.150 'gunzip | sudo /usr/local/bin/k3s ctr images import -'
+KUBECONFIG=~/.kube/feedme.yaml kubectl rollout restart deploy/api deploy/worker -n feedme
+```
+
+The `rollout restart` is required: the manifests use `:latest`, so re-importing an image does not by
+itself tell Kubernetes anything changed. Note `sudo k3s` needs the full path on the node.
+
+**Apply manifests with `kubectl apply -k k8s/`, never `kubectl apply -f k8s/<file>.yaml`** — the
+kustomization is what injects `namespace: feedme`, and bypassing it silently creates duplicate
+objects in `default` (see [ADR-0020](docs/adr/0020-public-exposure-and-tls.md), which records the
+time that cost a Let's Encrypt duplicate-certificate allowance).
+
 Traefik ships with k3s and is the ingress controller (3.7). It already answers on 80/443 from the
 public IP, returning 404 until Ingress routes exist.
 
