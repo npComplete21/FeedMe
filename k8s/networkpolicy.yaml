@@ -1,0 +1,29 @@
+# Stops any pod in this namespace reaching the OCI instance metadata service.
+#
+# 169.254.169.254 returns instance identity and, where configured, credentials.
+# A compromised pod querying it is the standard SSRF-to-cloud-metadata escalation,
+# and it was reachable: a test pod got HTTP 200 from it before this existed.
+#
+# NetworkPolicy is allow-list only - there is no "deny" rule - so the way to block
+# one range is to allow everything *except* it. This single rule therefore has to
+# permit all legitimate egress too: CoreDNS (10.43.0.10), pod-to-pod (api->db,
+# worker->redis), and the public internet (the Claude API, and Object Storage for
+# backups). All of those fall inside 0.0.0.0/0 and are unaffected.
+#
+# Host-level OUTPUT rules would be the wrong layer for this - they cannot
+# distinguish a pod from the node's own traffic, and the node legitimately needs
+# metadata access for iSCSI and cloud-init.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-metadata-egress
+spec:
+  podSelector: {}          # every pod in the namespace
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.0.0/16

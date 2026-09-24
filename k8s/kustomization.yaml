@@ -16,6 +16,7 @@ resources:
   - api.yaml
   - worker.yaml
   - ui.yaml
+  - networkpolicy.yaml
   - redirect-middleware.yaml
   - ingress.yaml
   - backup.yaml
