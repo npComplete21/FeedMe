@@ -1,0 +1,100 @@
+name: deploy
+
+# Deploys only on a version tag, never on a merge. ci.yml already built and
+# published an image for every commit on main, so tagging deploys that exact
+# commit rather than rebuilding it - "built" and "released" stay separate
+# decisions.
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: deploy-production        # never let two deploys race
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: owner
+        run: echo "name=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Fail before touching the cluster if the tagged commit was never built -
+      # e.g. a tag pushed to a commit that never landed on main, or pushed
+      # before ci.yml finished. Without this the deploy would half-apply and
+      # leave pods in ImagePullBackOff.
+      - name: Verify images exist for this commit
+        run: |
+          set -euo pipefail
+          for c in api worker ui; do
+            ref="ghcr.io/${{ steps.owner.outputs.name }}/feedme-$c:${GITHUB_SHA}"
+            echo "checking $ref"
+            docker buildx imagetools inspect "$ref" >/dev/null
+          done
+
+      - name: Install kustomize
+        run: |
+          set -euo pipefail
+          curl -sSfL https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh \
+            | bash -s -- 5.5.0 /usr/local/bin
+
+      - name: Pin manifests to this commit's images
+        run: |
+          set -euo pipefail
+          cd k8s
+          for c in api worker ui; do
+            kustomize edit set image \
+              "feedme-$c=ghcr.io/${{ steps.owner.outputs.name }}/feedme-$c:${GITHUB_SHA}"
+          done
+          kustomize build . > /tmp/manifests.yaml
+          grep -E '^\s+image: ghcr' /tmp/manifests.yaml | sort -u
+
+      - name: Authorize SSH to the node
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      # The rendered manifests are piped to the node and applied there, so the
+      # Kubernetes API never has to be exposed to the internet (ADR-0019).
+      # kustomize has already injected `namespace: feedme`, so applying the
+      # rendered stream with -f is safe here - unlike applying a raw file from
+      # k8s/, which is the mistake ADR-0020 records.
+      - name: Apply to the cluster
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy -o BatchMode=yes -o IdentitiesOnly=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply -f -' < /tmp/manifests.yaml
+
+      - name: Wait for rollout
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy -o BatchMode=yes -o IdentitiesOnly=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+             for d in api worker ui; do
+               kubectl rollout status "deploy/$d" -n feedme --timeout=300s
+             done'
+
+      # Proves the deployed site actually serves, not merely that pods restarted.
+      - name: Smoke test the live site
+        run: |
+          set -euo pipefail
+          code=$(curl -sL -o /dev/null -w '%{http_code}' --retry 5 --retry-delay 10 \
+                   --retry-all-errors -m 30 https://feedmepls.xyz/)
+          echo "https://feedmepls.xyz -> HTTP $code"
+          [ "$code" = "200" ]

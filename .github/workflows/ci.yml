@@ -1,0 +1,81 @@
+name: ci
+
+# Runs on every push and PR. Building on main also publishes images tagged with
+# the commit SHA, so a later `v*` tag can deploy that exact commit without
+# rebuilding it (see deploy.yml).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # Same arm64 architecture the cluster runs, and free for public repos.
+    runs-on: ubuntu-24.04-arm
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: feedme
+          POSTGRES_PASSWORD: feedme
+          POSTGRES_DB: feedme_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U feedme"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # Real Postgres, not sqlite - the project relies on Postgres-specific
+      # behaviour and CLAUDE.md requires tests run against the real thing.
+      TEST_DATABASE_URL: postgresql+psycopg://feedme:feedme@localhost:5432/feedme_test
+      # app/api/auth.py fails fast at import time without these.
+      JWT_SECRET_KEY: ci-test-secret-not-used-anywhere-real
+      FEEDME_REGISTRATION_CODE: ci-test-code
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -e ".[api,ui,dev]"
+      # Integration tests hit the real Anthropic API and are excluded by the
+      # default addopts in pyproject.toml; this is the unit suite only.
+      - run: pytest -q
+
+  build:
+    needs: test                      # never publish an image that failed tests
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write                # push to GHCR with the built-in token
+    strategy:
+      matrix:
+        component: [api, worker, ui]
+    steps:
+      - uses: actions/checkout@v4
+      # GHCR requires a lowercase owner; github.repository_owner preserves case.
+      - id: owner
+        run: echo "name=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/${{ matrix.component }}.Dockerfile
+          # Explicit even though the runner is already arm64, so a change of
+          # runner label can't silently start producing amd64 images the node
+          # cannot run.
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ steps.owner.outputs.name }}/feedme-${{ matrix.component }}:${{ github.sha }}
+            ghcr.io/${{ steps.owner.outputs.name }}/feedme-${{ matrix.component }}:main
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

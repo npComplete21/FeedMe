@@ -29,3 +29,23 @@ labels:
   - pairs:
       app.kubernetes.io/part-of: feedme
     includeSelectors: false
+
+# Image substitution lives here rather than in the Deployments, so CI changes
+# exactly one place. The manifests refer to the short symbolic names below;
+# `kustomize edit set image feedme-api=<registry>/<name>:<sha>` rewrites them at
+# deploy time (.github/workflows/deploy.yml).
+#
+# newTag is `latest` only as a local-development fallback - every real deploy
+# overrides it with an immutable per-commit tag, which is what makes
+# `kubectl rollout undo` and `rollout status` meaningful. ADR-0018 flagged the
+# original :latest tags as temporary; this is where they retire.
+images:
+  - name: feedme-api
+    newName: ghcr.io/npcomplete21/feedme-api
+    newTag: latest
+  - name: feedme-worker
+    newName: ghcr.io/npcomplete21/feedme-worker
+    newTag: latest
+  - name: feedme-ui
+    newName: ghcr.io/npcomplete21/feedme-ui
+    newTag: latest
