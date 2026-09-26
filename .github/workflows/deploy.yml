@@ -43,11 +43,18 @@ jobs:
             docker buildx imagetools inspect "$ref" >/dev/null
           done
 
-      - name: Install kustomize
+      # ubuntu-24.04-arm already ships kustomize, and its installer refuses to
+      # overwrite an existing binary - so only install when it's genuinely absent
+      # rather than assuming either way.
+      - name: Ensure kustomize is available
         run: |
           set -euo pipefail
-          curl -sSfL https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh \
-            | bash -s -- 5.5.0 /usr/local/bin
+          if command -v kustomize >/dev/null; then
+            echo "using preinstalled $(kustomize version)"
+          else
+            curl -sSfL https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh \
+              | bash -s -- 5.5.0 /usr/local/bin
+          fi
 
       - name: Pin manifests to this commit's images
         run: |
