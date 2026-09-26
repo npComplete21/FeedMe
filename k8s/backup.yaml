@@ -23,6 +23,12 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 2
+      # Without this, a job that can never start - e.g. a missing Secret key,
+      # which leaves the pod in CreateContainerConfigError while kubelet retries
+      # forever - hangs around indefinitely. Combined with concurrencyPolicy:
+      # Forbid that doesn't just fail one night's backup, it blocks every
+      # subsequent run. Observed: one such job wedged the schedule for 37 hours.
+      activeDeadlineSeconds: 1800
       template:
         spec:
           restartPolicy: OnFailure
