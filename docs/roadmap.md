@@ -102,21 +102,11 @@ AWS on cost (see [ADR-0016](adr/0016-oracle-cloud-k3s-over-aws.md), supersedes
   proving the flow against staging; Traefik terminates TLS and 301s HTTP to HTTPS. Verified
   from the public internet (`ssl_verify_result=0`) and by logging into the live site in a
   browser. See [ADR-0020](adr/0020-public-exposure-and-tls.md).
-- [ ] 3.8 GitHub Actions — build, push, deploy on merge to main. **Three decisions open, not yet
-  made** (raised 2026-09-24, deferred to the next session):
-  - *Registry.* A CI runner can't `docker save | ssh` the way 3.4 does. GHCR is the likely answer —
-    free for public repos and authenticates from Actions with the built-in `GITHUB_TOKEN`, no extra
-    secret. Once images come from a registry, `imagePullPolicy: IfNotPresent` and the `:latest` tags
-    in `k8s/` should become immutable per-commit tags (see [ADR-0018](adr/0018-kubernetes-manifest-shape.md)),
-    so `kubectl rollout` can tell versions apart and roll back.
-  - *How the runner reaches the cluster.* Port 6443 is deliberately closed to the internet
-    ([ADR-0019](adr/0019-single-firewall-layer-on-the-node.md)). Either the runner SSHes to the node
-    with a deploy key held as a GitHub secret and runs `kubectl` there, or 6443 opens to GitHub's
-    published IP ranges. **Leaning SSH** — those ranges are broad and change, and opening the API
-    server undoes a deliberate choice.
-  - *Trigger.* Every push to `main`, or only tagged releases.
-- [ ] Retire the `:latest` tags once 3.8 introduces real per-commit tags — noted in ADR-0018 as the
-  point at which `imagePullPolicy: IfNotPresent` stops being needed.
+- [x] 3.8 GitHub Actions — `ci.yml` tests against a real Postgres service container on every push
+  and PR, then builds and publishes all three `arm64` images to GHCR tagged with the commit SHA;
+  `deploy.yml` deploys that already-built image on a `v*` tag, over SSH so 6443 stays closed. First
+  tagged release is `v0.1.0`; the cluster now runs immutable per-commit tags, which retires the
+  `:latest` tags ADR-0018 called temporary. See [ADR-0022](adr/0022-cicd-build-on-merge-deploy-on-tag.md).
 - [ ] 3.9 Verify live — real domain, real TLS, all 50-user-scale checks passing
 
 ## Phase 4 — Multi-user + polish
