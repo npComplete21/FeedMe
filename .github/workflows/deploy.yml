@@ -7,6 +7,9 @@ name: deploy
 on:
   push:
     tags: ["v*"]
+  # Lets a deploy be re-run against an already-built commit without cutting a
+  # throwaway version tag - useful when fixing the pipeline itself.
+  workflow_dispatch:
 
 concurrency:
   group: deploy-production        # never let two deploys race
@@ -98,10 +101,23 @@ jobs:
              done'
 
       # Proves the deployed site actually serves, not merely that pods restarted.
+      # Written as an explicit loop rather than curl's own --retry: the first
+      # version combined --retry-all-errors with -w and exited 23 (write error)
+      # in under a second, without ever reporting a status. Retrying by hand is
+      # duller but prints each attempt and curl's own exit code, so a future
+      # failure here says what actually happened.
       - name: Smoke test the live site
         run: |
-          set -euo pipefail
-          code=$(curl -sL -o /dev/null -w '%{http_code}' --retry 5 --retry-delay 10 \
-                   --retry-all-errors -m 30 https://feedmepls.xyz/)
-          echo "https://feedmepls.xyz -> HTTP $code"
-          [ "$code" = "200" ]
+          set -uo pipefail
+          for attempt in 1 2 3 4 5; do
+            code=$(curl -sSL -o /dev/null -w '%{http_code}' -m 30 https://feedmepls.xyz/)
+            rc=$?
+            echo "attempt $attempt: curl exit=$rc http=$code"
+            if [ "$rc" = "0" ] && [ "$code" = "200" ]; then
+              echo "live site healthy"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "site did not return 200 after 5 attempts" >&2
+          exit 1
