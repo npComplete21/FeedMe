@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -139,17 +140,47 @@ def test_extract_info_passes_cookies_when_the_file_exists(monkeypatch, tmp_path)
     monkeypatch.setattr("app.ingestion.youtube._COOKIES_PATH", str(cookies))
 
     seen = {}
+    global _copied_contents
+    _copied_contents = None
     mock_ydl = MagicMock()
     mock_ydl.__enter__.return_value.extract_info.return_value = {"title": "t"}
+
+    def _factory(opts):
+        seen.update(opts)
+        # read it here, since extract_info deletes the copy before returning
+        globals()["_copied_contents"] = Path(opts["cookiefile"]).read_text()
+        return mock_ydl
+
+    monkeypatch.setattr("app.ingestion.youtube.yt_dlp.YoutubeDL", _factory)
+    extract_info("https://youtube.com/watch?v=ok")
+
+    # NOT the mounted path itself: yt-dlp rewrites the cookie jar on close, and a
+    # Kubernetes Secret mount is read-only, so passing it directly raises
+    # OSError: [Errno 30]. It must be a copy, with the same contents.
+    assert seen["cookiefile"] != str(cookies)
+    assert Path(seen["cookiefile"]).name.startswith("ytdlp-cookies-")
+    assert _copied_contents == cookies.read_text()
+
+
+def test_extract_info_cleans_up_the_scratch_cookie_file(monkeypatch, tmp_path):
+    cookies = tmp_path / "cookies.txt"
+    cookies.write_text("# Netscape HTTP Cookie File\n")
+    monkeypatch.setattr("app.ingestion.youtube._COOKIES_PATH", str(cookies))
+
+    seen = {}
+    mock_ydl = MagicMock()
+    mock_ydl.__enter__.return_value.extract_info.side_effect = yt_dlp.utils.DownloadError("boom")
 
     def _factory(opts):
         seen.update(opts)
         return mock_ydl
 
     monkeypatch.setattr("app.ingestion.youtube.yt_dlp.YoutubeDL", _factory)
-    extract_info("https://youtube.com/watch?v=ok")
+    with pytest.raises(YouTubeFetchError):
+        extract_info("https://youtube.com/watch?v=bad")
 
-    assert seen["cookiefile"] == str(cookies)
+    # Cleaned up even when the call fails - these hold real session cookies.
+    assert not Path(seen["cookiefile"]).exists()
 
 
 def test_extract_info_omits_cookies_when_the_file_is_absent(monkeypatch, tmp_path):

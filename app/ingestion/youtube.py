@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
+import tempfile
 from dataclasses import dataclass
 
 import httpx
@@ -55,11 +57,23 @@ class YouTubeSource:
 
 def extract_info(url: str) -> dict:
     opts: dict = {"quiet": True, "skip_download": True, "noplaylist": True}
+    scratch_cookies: str | None = None
+
     # Only pass cookiefile when the file actually exists - yt-dlp errors out on a
     # missing one, which would turn "no cookies configured" into a hard failure
     # for the many videos that need no authentication at all.
     if _COOKIES_PATH and os.path.isfile(_COOKIES_PATH):
-        opts["cookiefile"] = _COOKIES_PATH
+        # yt-dlp rewrites the cookie jar when the YoutubeDL context closes, and
+        # the file is mounted from a Kubernetes Secret, which is always read-only.
+        # Pointing it straight at the mount raises OSError: [Errno 30] Read-only
+        # file system on every call - i.e. supplying cookies would make things
+        # strictly worse than having none. Work from a disposable copy instead;
+        # discarding yt-dlp's updates is fine, since the Secret is the source of
+        # truth and refreshing it is a deliberate act.
+        fd, scratch_cookies = tempfile.mkstemp(prefix="ytdlp-cookies-", suffix=".txt")
+        os.close(fd)  # mkstemp creates it 0600, which is what we want for cookies
+        shutil.copyfile(_COOKIES_PATH, scratch_cookies)
+        opts["cookiefile"] = scratch_cookies
 
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -73,6 +87,14 @@ def extract_info(url: str) -> dict:
                 "cookies if this is happening often."
             ) from exc
         raise YouTubeFetchError(f"Could not fetch video info for {url}: {exc}") from exc
+    finally:
+        if scratch_cookies:
+            # Best effort: a leftover temp file is untidy, not a failure worth
+            # masking the real result over.
+            try:
+                os.unlink(scratch_cookies)
+            except OSError:
+                pass
 
 
 def select_caption_url(info: dict, language: str = "en") -> str:
