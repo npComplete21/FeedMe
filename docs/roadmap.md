@@ -107,7 +107,26 @@ AWS on cost (see [ADR-0016](adr/0016-oracle-cloud-k3s-over-aws.md), supersedes
   `deploy.yml` deploys that already-built image on a `v*` tag, over SSH so 6443 stays closed. First
   tagged release is `v0.1.0`; the cluster now runs immutable per-commit tags, which retires the
   `:latest` tags ADR-0018 called temporary. See [ADR-0022](adr/0022-cicd-build-on-merge-deploy-on-tag.md).
-- [ ] 3.9 Verify live — real domain, real TLS, all 50-user-scale checks passing
+- [x] 3.9 Verify live — exercised end to end on `https://feedmepls.xyz` in a browser, not by
+  inspection. Registration is gated (wrong code cleanly rejected); a new account registers, logs in,
+  ingests a caption through Redis → worker → Claude → Postgres, matches against a pantry, and gets a
+  contextual answer from the chat. Isolation confirmed **bidirectionally** — each account sees only
+  its own recipes through the UI, `/recipes`, `/match` and `/chat`. Wrong password → 401. TLS
+  auto-renews 2026-11-23 (expires 12-23). Backups ran at 16:09 UTC and a restore was tested.
+  Rollback is real now that tags are immutable.
+
+  **Headroom at 2 OCPU / 12GB is ample:** 110m CPU (5%) and 2.9GB of 10GB in use at rest, load
+  average 0.15, zero pod restarts, node up 3d11h. Requests reserve 650m CPU (32%) and 1.2GB (11%),
+  so there is room for well beyond 50 users — this app is idle-heavy, and the one genuinely
+  CPU-bound step (LLM parsing) happens on Anthropic's side, not here.
+
+  One thing found and fixed during this pass: **container images accumulate on the node.** Every
+  deploy adds a per-commit tag, and three superseded `docker.io` images from the manual-import era
+  were still held. Disk was at 53%; pruning the unused ones recovered ~1GB. kubelet's image GC only
+  starts at 85%, so this self-manages before filling, but on a 30GB disk it is worth watching.
+
+**Phase 3 complete.** FeedMe runs at https://feedmepls.xyz on a single-node k3s cluster,
+deployed by tagging a release, with nightly off-node backups and a tested restore.
 
 ## Phase 4 — Multi-user + polish
 

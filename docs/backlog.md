@@ -24,3 +24,20 @@ bullet point six months from now).
   imports. If the allowed values change often enough that this becomes annoying, consider a shared
   constants module both sides can depend on without pulling in `anthropic`/`sqlalchemy`.
   *Noted: 2026-07-17, during Phase 1.2.*
+
+- [ ] **Remove the test accounts before inviting real users.** `smoke@test.local` and
+  `dana@feedmepls.xyz` were created during Phase 3 verification and hold throwaway recipes. Harmless,
+  but they'll look odd in any future user count and the passwords were chosen for convenience, not
+  secrecy. *Noted: 2026-09-27, during Phase 3.9.*
+
+- [ ] **No alerting on silent failures.** Two known ones: the backup PAR will eventually expire and
+  uploads stop while every pod stays green (ADR-0023), and cert-manager renewal failures surface only
+  in `kubectl describe certificate`. Neither is visible without going to look. A single weekly check —
+  or a cron that pings a healthcheck service on success — would cover both.
+  *Noted: 2026-09-27, during Phase 3.9.*
+
+- [ ] **Node disk grows with every deploy.** Each release adds per-commit image tags to containerd;
+  pruning superseded images during 3.9 recovered ~1GB of a 30GB disk then at 53%. kubelet's image GC
+  only triggers at 85%, so it self-manages before filling, but worth a periodic
+  `k3s ctr -n k8s.io images ls` and prune, or tightening the GC threshold.
+  *Noted: 2026-09-27, during Phase 3.9.*
