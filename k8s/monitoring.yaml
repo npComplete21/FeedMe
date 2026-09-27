@@ -1,0 +1,98 @@
+# Prometheus + Grafana + Alertmanager, via k3s's built-in helm-controller.
+#
+# Applied out of band (`kubectl apply -f k8s/monitoring.yaml`), NOT through
+# k8s/kustomization.yaml - that kustomization forces `namespace: feedme` onto
+# everything it manages, and this belongs in its own namespace. Same treatment
+# as cert-issuer.yaml and cert-manager itself.
+#
+# Sized deliberately for a 2 OCPU / 10GB node whose root disk is already ~60%
+# full and shared with the Postgres PVC (local-path puts it on the root
+# filesystem). Every default that wants more than it needs here is turned down.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: kube-prometheus-stack
+  namespace: kube-system        # helm-controller only watches kube-system
+spec:
+  chart: kube-prometheus-stack
+  repo: https://prometheus-community.github.io/helm-charts
+  targetNamespace: monitoring
+  createNamespace: false
+  valuesContent: |-
+    # --- Prometheus -------------------------------------------------------
+    prometheus:
+      prometheusSpec:
+        # 7 days is plenty to answer "what happened last night" without the
+        # TSDB competing with Postgres for the same 30GB root disk.
+        retention: 7d
+        retentionSize: 1500MB
+        resources:
+          requests: {cpu: 100m, memory: 400Mi}
+          limits:   {memory: 1Gi}
+        storageSpec:
+          volumeClaimTemplate:
+            spec:
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: 2Gi
+        # Watch every namespace, not just the chart's own release.
+        serviceMonitorSelectorNilUsesHelmValues: false
+        ruleSelectorNilUsesHelmValues: false
+
+    # --- Alertmanager -----------------------------------------------------
+    alertmanager:
+      alertmanagerSpec:
+        resources:
+          requests: {cpu: 25m, memory: 64Mi}
+          limits:   {memory: 128Mi}
+        storage:
+          volumeClaimTemplate:
+            spec:
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: 1Gi
+
+    # --- Grafana ----------------------------------------------------------
+    grafana:
+      # Deliberately stateless: dashboards come from the chart, so there is
+      # nothing worth persisting and one less PVC on a tight disk.
+      persistence:
+        enabled: false
+      resources:
+        requests: {cpu: 50m, memory: 200Mi}
+        # 256Mi was OOMKilled on startup (exit 137) - Grafana's Go runtime plus
+        # the bundled dashboards need more headroom than the pod's idle usage
+        # suggests. Measured, not guessed.
+        limits:   {memory: 512Mi}
+      # Reached over `kubectl port-forward`, never exposed publicly - the
+      # Ingress deliberately routes only the UI (ADR-0020).
+      service:
+        type: ClusterIP
+
+    # --- Exporters --------------------------------------------------------
+    nodeExporter:
+      enabled: true               # disk, memory, load - the node-level signals
+    prometheus-node-exporter:
+      resources:
+        requests: {cpu: 25m, memory: 32Mi}
+        limits:   {memory: 64Mi}
+    kube-state-metrics:
+      # pod restarts, job failures, cronjob schedules, PVC usage
+      resources:
+        requests: {cpu: 25m, memory: 64Mi}
+        limits:   {memory: 128Mi}
+
+    # --- Turned off: control-plane components k3s embeds in one process, so
+    # --- these scrape targets do not exist and would alert as "down" forever.
+    kubeControllerManager: {enabled: false}
+    kubeScheduler:         {enabled: false}
+    kubeProxy:             {enabled: false}
+    kubeEtcd:              {enabled: false}

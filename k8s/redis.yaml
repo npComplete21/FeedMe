@@ -25,6 +25,19 @@ spec:
       containers:
         - name: redis
           image: redis:7-alpine
+          # Without a cap Redis grows until the node runs out of memory, and the
+          # default `noeviction` policy makes it start REFUSING WRITES rather
+          # than shedding data - which surfaces as ingestion silently failing.
+          # 200Mi is far above anything this queue needs (task payloads are a URL
+          # and a caption); allkeys-lru means a runaway backlog degrades instead
+          # of breaking. The container limit is 256Mi, so Redis evicts before the
+          # kernel OOM-kills it.
+          args:
+            - redis-server
+            - --maxmemory
+            - 200mb
+            - --maxmemory-policy
+            - allkeys-lru
           ports:
             - containerPort: 6379
           readinessProbe:

@@ -117,6 +117,22 @@ kustomization is what injects `namespace: feedme`, and bypassing it silently cre
 objects in `default` (see [ADR-0020](docs/adr/0020-public-exposure-and-tls.md), which records the
 time that cost a Let's Encrypt duplicate-certificate allowance).
 
+**Monitoring** lives in the `monitoring` namespace: Prometheus, Grafana, Alertmanager and exporters,
+installed via k3s's helm-controller. Applied **out of band**, like cert-manager, because
+`k8s/kustomization.yaml` forces `namespace: feedme` onto everything it manages:
+
+```
+kubectl apply -f k8s/monitoring.yaml         # the stack (HelmChart CRD)
+kubectl apply -f k8s/monitoring-rules.yaml   # FeedMe alert rules + cert-manager ServiceMonitor
+```
+
+Neither Prometheus nor Grafana is exposed publicly - reach them over port-forward:
+
+```
+kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:9090
+kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3000:80
+```
+
 Traefik ships with k3s and is the ingress controller (3.7). It already answers on 80/443 from the
 public IP, returning 404 until Ingress routes exist.
 

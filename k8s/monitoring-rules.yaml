@@ -1,0 +1,122 @@
+# FeedMe-specific alerting. The kube-prometheus-stack chart already ships ~220
+# generic rules (pod crashloops, node pressure, API server health); these cover
+# the failure modes particular to this system - the ones that were silent.
+#
+# Applied out of band alongside k8s/monitoring.yaml, for the same reason: the
+# main kustomization forces namespace: feedme.
+---
+# cert-manager exposes certificate expiry on :9402 but nothing was scraping it,
+# so the "TLS renewal quietly failed" case had no metric behind it.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: cert-manager
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames: [cert-manager]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cert-manager
+      app.kubernetes.io/component: controller
+  endpoints:
+    - port: http-metrics
+      interval: 60s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: feedme-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: feedme.silent-failures
+      rules:
+        # 1. Backups stop. The original silent failure: the PAR expires, uploads
+        #    fail, and every pod stays green. 26h rather than 24h so a slightly
+        #    late nightly run doesn't page.
+        - alert: FeedmeBackupStale
+          expr: |
+            time() - max(kube_cronjob_status_last_successful_time{cronjob="db-backup"}) > 26 * 3600
+          for: 10m
+          labels: {severity: critical}
+          annotations:
+            summary: "No successful Postgres backup in over 26 hours"
+            description: >-
+              The db-backup CronJob has not completed successfully since
+              {{ $value | humanizeDuration }} ago. Most likely the Object Storage
+              pre-authenticated request has expired - see ADR-0023 for rotation steps.
+
+        # 2. The same job existing but failing, which is a different signal from
+        #    it never having run.
+        - alert: FeedmeBackupJobFailing
+          expr: kube_job_status_failed{namespace="feedme", job_name=~"db-backup.*"} > 0
+          for: 15m
+          labels: {severity: warning}
+          annotations:
+            summary: "Postgres backup job is failing"
+            description: "Check `kubectl logs -n feedme job/{{ $labels.job_name }} -c dump -c upload`."
+
+        # 3. Disk. Sharper than the generic node rules because local-path puts the
+        #    Postgres PVC on the ROOT filesystem - a full disk is data loss here,
+        #    not just failed image pulls.
+        - alert: FeedmeNodeDiskFilling
+          expr: |
+            node_filesystem_avail_bytes{mountpoint="/", fstype!="tmpfs"}
+              / node_filesystem_size_bytes{mountpoint="/", fstype!="tmpfs"} < 0.20
+          for: 15m
+          labels: {severity: critical}
+          annotations:
+            summary: "Node root filesystem below 20% free"
+            description: >-
+              Only {{ $value | humanizePercentage }} free. Postgres data lives on this
+              same filesystem, so this is a data-loss risk rather than an inconvenience.
+              Prune images: `k3s ctr -n k8s.io images ls`.
+
+        # 4. TLS renewal failing quietly. cert-manager retries on its own, so the
+        #    only symptom before the site breaks is the expiry creeping closer.
+        - alert: FeedmeCertExpiringSoon
+          expr: |
+            (certmanager_certificate_expiration_timestamp_seconds{name="feedme-tls"} - time()) < 14 * 24 * 3600
+          for: 1h
+          labels: {severity: critical}
+          annotations:
+            summary: "TLS certificate expires in under 14 days"
+            description: >-
+              cert-manager renews at 30 days remaining, so reaching 14 means renewal
+              has been failing for two weeks. `kubectl describe certificate feedme-tls -n feedme`.
+
+        # 5. Redis approaching its cap. With allkeys-lru it now degrades rather than
+        #    refusing writes, but sustained pressure still means something is wrong.
+        - alert: FeedmeRedisMemoryHigh
+          expr: |
+            container_memory_working_set_bytes{namespace="feedme", container="redis"} > 200 * 1024 * 1024
+          for: 30m
+          labels: {severity: warning}
+          annotations:
+            summary: "Redis working set above 200MB"
+            description: "Queue may be backing up - check whether the worker is consuming."
+
+        # 6. The worker has no liveness probe by design (ADR-0018: `celery inspect
+        #    ping` is slow and false-positives under load), so a wedged worker would
+        #    otherwise be invisible until someone reports a stuck ingest.
+        - alert: FeedmeWorkerNotReady
+          expr: |
+            kube_deployment_status_replicas_available{namespace="feedme", deployment="worker"} < 1
+          for: 10m
+          labels: {severity: critical}
+          annotations:
+            summary: "No Celery worker available"
+            description: "Recipe ingestion is queuing but nothing is consuming it."
+
+        - alert: FeedmeServiceDown
+          expr: |
+            kube_deployment_status_replicas_available{namespace="feedme", deployment=~"api|ui|db"} < 1
+          for: 5m
+          labels: {severity: critical}
+          annotations:
+            summary: "feedme/{{ $labels.deployment }} has no available replicas"
