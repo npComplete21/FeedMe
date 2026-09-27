@@ -63,10 +63,14 @@ jobs:
         run: |
           reason="${{ steps.site.outputs.reason }}${{ steps.tls.outputs.reason }}${{ steps.watchdog.outputs.reason }}"
           [ -n "$reason" ] || reason="watchdog check failed - see the run log"
+          url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          # Built with printf rather than an inline multi-line string: a literal
+          # newline inside the argument ends up at column 0, which terminates the
+          # YAML block scalar and makes the whole workflow unparseable.
+          body=$(printf '%s\n\nRun: %s' "$reason" "$url")
           curl -s -X POST "https://ntfy.sh/${{ secrets.NTFY_TOPIC }}" \
-            -H "Title: 🚨 FeedMe watchdog" \
+            -H "Title: FeedMe watchdog FAILED" \
             -H "Priority: urgent" \
             -H "Tags: rotating_light" \
-            -d "$reason
-Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            -d "$body" \
             -o /dev/null -w "ntfy -> %{http_code}\n"
