@@ -25,11 +25,6 @@ bullet point six months from now).
   constants module both sides can depend on without pulling in `anthropic`/`sqlalchemy`.
   *Noted: 2026-07-17, during Phase 1.2.*
 
-- [ ] **Remove the test accounts before inviting real users.** `smoke@test.local` and
-  `dana@feedmepls.xyz` were created during Phase 3 verification and hold throwaway recipes. Harmless,
-  but they'll look odd in any future user count and the passwords were chosen for convenience, not
-  secrecy. *Noted: 2026-09-27, during Phase 3.9.*
-
 - [ ] **No alerting on silent failures.** Two known ones: the backup PAR will eventually expire and
   uploads stop while every pod stays green (ADR-0023), and cert-manager renewal failures surface only
   in `kubectl describe certificate`. Neither is visible without going to look. A single weekly check —
@@ -41,3 +36,20 @@ bullet point six months from now).
   only triggers at 85%, so it self-manages before filling, but worth a periodic
   `k3s ctr -n k8s.io images ls` and prune, or tightening the GC threshold.
   *Noted: 2026-09-27, during Phase 3.9.*
+
+- [ ] **Foreign keys have no `ondelete`, so the database won't cascade.** `Recipe.user_id`,
+  `RawSource.user_id`, `RecipeIngredient.recipe_id` and `RecipeIngredient.ingredient_id` are all
+  plain `ForeignKey(...)` in `app/models.py` with no `ondelete`, which Postgres treats as
+  `NO ACTION`. The `cascade="all, delete-orphan"` on `Recipe.ingredients` is ORM-level only — it
+  applies when SQLAlchemy deletes a loaded `Recipe` object, and does nothing for a SQL `DELETE`.
+
+  Consequence: deleting a user requires deleting child-first (`recipe_ingredients` → `recipes` →
+  `raw_sources` → `users`) or it fails on a constraint violation. That's fine for the occasional
+  manual cleanup — it's exactly how the Phase 3.9 test accounts were removed — but it becomes a real
+  trap the moment "delete my account" is a feature, because the obvious implementation
+  (`db.delete(user); db.commit()`) will raise an `IntegrityError` rather than cascade.
+
+  Fix when that feature is wanted: a migration adding `ON DELETE CASCADE` to the user-owned FKs, and
+  decide deliberately what happens to `ingredients` — it's a shared lookup table with no `user_id`,
+  so rows there outlive any single user by design and should probably stay. *Noted: 2026-09-27,
+  after deleting the Phase 3.9 test accounts.*
