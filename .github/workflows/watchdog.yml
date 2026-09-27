@@ -1,0 +1,72 @@
+name: watchdog
+
+# The piece in-cluster monitoring structurally cannot provide: an observer that
+# survives the cluster dying. Prometheus cannot alert you that Prometheus is
+# down, so this runs on GitHub's infrastructure and pushes to the same phone.
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: watchdog
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Public site responds
+        id: site
+        run: |
+          set -uo pipefail
+          code=$(curl -sL -o /dev/null -w '%{http_code}' -m 30 https://feedmepls.xyz/ || echo 000)
+          echo "https://feedmepls.xyz -> $code"
+          [ "$code" = "200" ] || { echo "reason=site returned HTTP $code" >> "$GITHUB_OUTPUT"; exit 1; }
+
+      - name: TLS certificate not near expiry
+        id: tls
+        run: |
+          set -uo pipefail
+          end=$(echo | openssl s_client -connect feedmepls.xyz:443 -servername feedmepls.xyz 2>/dev/null \
+                | openssl x509 -noout -enddate | cut -d= -f2)
+          days=$(( ( $(date -d "$end" +%s) - $(date +%s) ) / 86400 ))
+          echo "certificate expires in $days days ($end)"
+          # cert-manager renews at 30 days remaining, so under 10 means renewal
+          # has been failing for three weeks and the site is about to break.
+          [ "$days" -gt 10 ] || { echo "reason=TLS cert expires in $days days" >> "$GITHUB_OUTPUT"; exit 1; }
+
+      - name: Alerting pipeline is alive
+        id: watchdog
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -uo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          # Prometheus fires Watchdog continuously as proof the whole rule
+          # evaluation and alerting path works. Its ABSENCE is the signal - that
+          # is the entire point of a dead man's switch.
+          state=$(ssh -i ~/.ssh/deploy -o BatchMode=yes -o IdentitiesOnly=yes \
+                    "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+                    "curl -s --max-time 20 http://\$(KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get svc -n monitoring kube-prometheus-stack-prometheus -o jsonpath='{.spec.clusterIP}'):9090/api/v1/query --data-urlencode 'query=ALERTS{alertname=\"Watchdog\",alertstate=\"firing\"}'" \
+                  | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["data"]["result"]))' 2>/dev/null || echo 0)
+          echo "Watchdog alert series firing: $state"
+          [ "$state" -ge 1 ] || { echo "reason=Prometheus Watchdog not firing - alerting pipeline is down" >> "$GITHUB_OUTPUT"; exit 1; }
+
+      # Only runs when something above failed. The cluster may be unreachable at
+      # this point, which is exactly why this notification is sent from here
+      # rather than from Alertmanager.
+      - name: Push failure to phone
+        if: failure()
+        run: |
+          reason="${{ steps.site.outputs.reason }}${{ steps.tls.outputs.reason }}${{ steps.watchdog.outputs.reason }}"
+          [ -n "$reason" ] || reason="watchdog check failed - see the run log"
+          curl -s -X POST "https://ntfy.sh/${{ secrets.NTFY_TOPIC }}" \
+            -H "Title: 🚨 FeedMe watchdog" \
+            -H "Priority: urgent" \
+            -H "Tags: rotating_light" \
+            -d "$reason
+Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            -o /dev/null -w "ntfy -> %{http_code}\n"
