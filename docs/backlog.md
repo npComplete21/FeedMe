@@ -25,17 +25,12 @@ bullet point six months from now).
   constants module both sides can depend on without pulling in `anthropic`/`sqlalchemy`.
   *Noted: 2026-07-17, during Phase 1.2.*
 
-- [ ] **No alerting on silent failures.** Two known ones: the backup PAR will eventually expire and
-  uploads stop while every pod stays green (ADR-0023), and cert-manager renewal failures surface only
-  in `kubectl describe certificate`. Neither is visible without going to look. A single weekly check —
-  or a cron that pings a healthcheck service on success — would cover both.
-  *Noted: 2026-09-27, during Phase 3.9.*
-
-- [ ] **Node disk grows with every deploy.** Each release adds per-commit image tags to containerd;
-  pruning superseded images during 3.9 recovered ~1GB of a 30GB disk then at 53%. kubelet's image GC
-  only triggers at 85%, so it self-manages before filling, but worth a periodic
-  `k3s ctr -n k8s.io images ls` and prune, or tightening the GC threshold.
-  *Noted: 2026-09-27, during Phase 3.9.*
+- [ ] **Node disk grows with every deploy.** Each release adds per-commit image tags to containerd.
+  Partly addressed 2026-09-27: kubelet image GC tightened from 85/80 to 70/55 and a
+  `FeedmeNodeDiskFilling` alert added (see [ADR-0025](adr/0025-monitoring-and-alerting.md)), because
+  `local-path` puts the Postgres PVC on the same root filesystem — a full disk is data loss, not a
+  failed pull. Still worth an occasional manual prune, and a real fix would be giving Postgres its
+  own block volume rather than sharing the root disk. *Noted: 2026-09-27, during Phase 3.9.*
 
 - [ ] **Foreign keys have no `ondelete`, so the database won't cascade.** `Recipe.user_id`,
   `RawSource.user_id`, `RecipeIngredient.recipe_id` and `RecipeIngredient.ingredient_id` are all
