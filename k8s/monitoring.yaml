@@ -52,6 +52,15 @@ spec:
         resources:
           requests: {cpu: 25m, memory: 64Mi}
           limits:   {memory: 128Mi}
+        # Mounts at /etc/alertmanager/secrets/alertmanager-ntfy/. Holds the ntfy
+        # topic URLs, which are credentials in their own right: anyone who knows
+        # the topic can read every alert. This repo is public, so the URLs are
+        # referenced by url_file rather than written into this file.
+        # Create with (see CLAUDE.md):
+        #   kubectl create secret generic alertmanager-ntfy -n monitoring \
+        #     --from-literal=firing-url=... --from-literal=resolved-url=...
+        secrets:
+          - alertmanager-ntfy
         storage:
           volumeClaimTemplate:
             spec:
@@ -59,6 +68,39 @@ spec:
               resources:
                 requests:
                   storage: 1Gi
+      config:
+        route:
+          receiver: ntfy
+          group_by: [alertname, namespace]
+          group_wait: 30s
+          group_interval: 5m
+          # Deliberately long: an unfixed problem should nudge daily, not every
+          # four hours. Re-notification is a reminder, not new information.
+          repeat_interval: 24h
+          routes:
+            # Watchdog fires CONSTANTLY by design - it is the heartbeat that
+            # proves the alerting pipeline itself is alive. Sending it to the
+            # phone would be pure noise, so it is swallowed here. Its value is
+            # realised by an EXTERNAL watcher noticing when it stops (see the
+            # scheduled GitHub Actions check) - in-cluster monitoring can never
+            # tell you the cluster is down.
+            - receiver: "null"
+              matchers: [alertname = "Watchdog"]
+            # k3s runs the control plane as one process; some chart rules assume
+            # separate components and fire spuriously.
+            - receiver: "null"
+              matchers: [alertname =~ "InfoInhibitor|KubeControllerManagerDown|KubeSchedulerDown|KubeProxyDown"]
+        receivers:
+          - name: "null"
+          - name: ntfy
+            webhook_configs:
+              # url_file keeps the topic out of git. send_resolved uses a second
+              # URL so a recovery reads as green and low priority rather than
+              # looking like another incident.
+              - url_file: /etc/alertmanager/secrets/alertmanager-ntfy/firing-url
+                send_resolved: false
+              - url_file: /etc/alertmanager/secrets/alertmanager-ntfy/resolved-url
+                send_resolved: true
 
     # --- Grafana ----------------------------------------------------------
     grafana:
