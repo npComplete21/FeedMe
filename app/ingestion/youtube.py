@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 
@@ -17,6 +18,28 @@ class YouTubeFetchError(Exception):
     """Raised when yt-dlp can't extract video info (private, deleted, invalid URL, ...)."""
 
 
+class YouTubeBlockedError(Exception):
+    """Raised when YouTube refuses the request with its anti-bot check.
+
+    Deliberately NOT a subclass of YouTubeFetchError: the worker treats
+    YouTubeFetchError as retryable, and retrying this is pointless. YouTube gates
+    specific videos behind this check when the request comes from a datacenter
+    IP, and it is not probabilistic - the same video was refused 6/6 times from
+    the cluster while succeeding first try from a residential connection.
+    """
+
+
+# yt-dlp surfaces the anti-bot refusal as an ordinary DownloadError whose message
+# contains this phrase, so matching on it is the only way to tell it apart from a
+# private or deleted video.
+_BOT_CHECK_MARKER = "Sign in to confirm"
+
+# Cookies let yt-dlp authenticate and sidestep the check. Optional: without them
+# most videos still work, and the failure is a clean YouTubeBlockedError rather
+# than a crash. Mounted from the feedme-secrets Secret in the cluster.
+_COOKIES_PATH = os.environ.get("YTDLP_COOKIES_FILE", "/etc/yt-dlp/cookies.txt")
+
+
 class NoCaptionsAvailableError(Exception):
     """Raised when a video has no subtitles or automatic captions in the requested language."""
 
@@ -31,11 +54,24 @@ class YouTubeSource:
 
 
 def extract_info(url: str) -> dict:
-    opts = {"quiet": True, "skip_download": True, "noplaylist": True}
+    opts: dict = {"quiet": True, "skip_download": True, "noplaylist": True}
+    # Only pass cookiefile when the file actually exists - yt-dlp errors out on a
+    # missing one, which would turn "no cookies configured" into a hard failure
+    # for the many videos that need no authentication at all.
+    if _COOKIES_PATH and os.path.isfile(_COOKIES_PATH):
+        opts["cookiefile"] = _COOKIES_PATH
+
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             return ydl.extract_info(url, download=False)
     except yt_dlp.utils.DownloadError as exc:
+        if _BOT_CHECK_MARKER in str(exc):
+            raise YouTubeBlockedError(
+                "YouTube blocked this request with its anti-bot check. This affects some "
+                "videos when the request comes from a server rather than a home connection. "
+                "Paste the video's transcript in manually, or refresh the server's YouTube "
+                "cookies if this is happening often."
+            ) from exc
         raise YouTubeFetchError(f"Could not fetch video info for {url}: {exc}") from exc
 
 

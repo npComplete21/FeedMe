@@ -5,6 +5,7 @@ import yt_dlp
 
 from app.ingestion.youtube import (
     NoCaptionsAvailableError,
+    YouTubeBlockedError,
     YouTubeFetchError,
     extract_info,
     fetch_youtube_transcript,
@@ -104,6 +105,70 @@ def test_extract_info_wraps_download_error(monkeypatch):
 
     with pytest.raises(YouTubeFetchError):
         extract_info("https://youtube.com/watch?v=bad")
+
+
+def test_extract_info_raises_blocked_error_on_the_anti_bot_check(monkeypatch):
+    """YouTube's bot check arrives as an ordinary DownloadError, so it has to be
+    told apart by message. It must NOT become a YouTubeFetchError, because the
+    worker retries those and retrying this never succeeds."""
+    mock_ydl = MagicMock()
+    mock_ydl.__enter__.return_value.extract_info.side_effect = yt_dlp.utils.DownloadError(
+        "ERROR: [youtube] abc123: Sign in to confirm you're not a bot. Use --cookies-from-browser"
+    )
+    monkeypatch.setattr("app.ingestion.youtube.yt_dlp.YoutubeDL", lambda opts: mock_ydl)
+
+    with pytest.raises(YouTubeBlockedError) as exc_info:
+        extract_info("https://youtube.com/watch?v=abc123")
+
+    # The user-facing message must be actionable, not a dump of yt-dlp's output.
+    message = str(exc_info.value)
+    assert "cookies-from-browser" not in message
+    assert "transcript" in message.lower()
+
+
+def test_blocked_error_is_not_a_fetch_error():
+    """Guards the inheritance choice: app/worker.py retries YouTubeFetchError, so
+    making YouTubeBlockedError a subclass would silently burn three retries on
+    something that cannot succeed."""
+    assert not issubclass(YouTubeBlockedError, YouTubeFetchError)
+
+
+def test_extract_info_passes_cookies_when_the_file_exists(monkeypatch, tmp_path):
+    cookies = tmp_path / "cookies.txt"
+    cookies.write_text("# Netscape HTTP Cookie File\n")
+    monkeypatch.setattr("app.ingestion.youtube._COOKIES_PATH", str(cookies))
+
+    seen = {}
+    mock_ydl = MagicMock()
+    mock_ydl.__enter__.return_value.extract_info.return_value = {"title": "t"}
+
+    def _factory(opts):
+        seen.update(opts)
+        return mock_ydl
+
+    monkeypatch.setattr("app.ingestion.youtube.yt_dlp.YoutubeDL", _factory)
+    extract_info("https://youtube.com/watch?v=ok")
+
+    assert seen["cookiefile"] == str(cookies)
+
+
+def test_extract_info_omits_cookies_when_the_file_is_absent(monkeypatch, tmp_path):
+    """yt-dlp errors on a missing cookiefile, which would turn "no cookies
+    configured" into a hard failure for the many videos that need none."""
+    monkeypatch.setattr("app.ingestion.youtube._COOKIES_PATH", str(tmp_path / "nope.txt"))
+
+    seen = {}
+    mock_ydl = MagicMock()
+    mock_ydl.__enter__.return_value.extract_info.return_value = {"title": "t"}
+
+    def _factory(opts):
+        seen.update(opts)
+        return mock_ydl
+
+    monkeypatch.setattr("app.ingestion.youtube.yt_dlp.YoutubeDL", _factory)
+    extract_info("https://youtube.com/watch?v=ok")
+
+    assert "cookiefile" not in seen
 
 
 # --- fetch_youtube_transcript (orchestration) -----------------------------------

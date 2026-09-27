@@ -44,6 +44,10 @@ spec:
                 secretKeyRef:
                   name: feedme-secrets
                   key: ANTHROPIC_API_KEY
+          volumeMounts:
+            - name: youtube-cookies
+              mountPath: /etc/yt-dlp
+              readOnly: true
           # No probes. A worker exposes no port, and the obvious liveness check
           # (`celery inspect ping`) is slow and prone to false negatives under
           # load - it would restart healthy workers mid-ingestion. Celery's own
@@ -56,3 +60,18 @@ spec:
               # Higher than the api's: yt-dlp buffers transcripts and the
               # Anthropic client holds the full response in memory.
               memory: 1Gi
+      volumes:
+        # Deliberately a separate Secret from feedme-secrets, marked optional:
+        # if it doesn't exist the volume is simply empty, the file is absent, and
+        # app/ingestion/youtube.py skips the cookiefile option. Referencing a
+        # missing *key* inside an existing Secret would instead block the pod from
+        # starting, which is a bad trade for an optional feature.
+        #
+        # YouTube gates some videos behind an anti-bot check when the request
+        # comes from a datacenter IP; cookies authenticate past it. Create with:
+        #   kubectl create secret generic feedme-youtube-cookies -n feedme \
+        #     --from-file=cookies.txt=/path/to/exported/cookies.txt
+        - name: youtube-cookies
+          secret:
+            secretName: feedme-youtube-cookies
+            optional: true

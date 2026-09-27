@@ -53,3 +53,10 @@ bullet point six months from now).
   decide deliberately what happens to `ingredients` — it's a shared lookup table with no `user_id`,
   so rows there outlive any single user by design and should probably stay. *Noted: 2026-09-27,
   after deleting the Phase 3.9 test accounts.*
+
+- [ ] **Let YouTube URLs accept a pasted transcript.** When YouTube's anti-bot check refuses a fetch
+  (see ADR-0024), the user is told to paste the transcript — but the only manual path is the
+  `instagram` source, so they have to mislabel a YouTube video as Instagram to use it. The backend
+  already accepts `caption_text` for any non-YouTube platform; the change is to allow it for
+  `youtube` too and show the caption box when a YouTube fetch fails, pre-filled with the URL.
+  *Noted: 2026-09-27, while fixing the YouTube bot-check handling.*
