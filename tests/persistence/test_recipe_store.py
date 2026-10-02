@@ -140,6 +140,44 @@ def test_persist_recipe_dedupes_parenthetical_and_plural_variants(db_session, ra
     assert len(onion_rows) == 1
 
 
+def test_persist_recipe_folds_variants_within_one_recipe(db_session, raw_source):
+    # Same real-world names, but in ONE recipe: both normalize to "onion", and a
+    # recipe can link an ingredient only once - this used to raise IntegrityError.
+    recipe = persist_recipe(
+        db_session,
+        raw_source,
+        _parsed_recipe(
+            ingredients=[
+                ParsedIngredient(name="onion (for cooking)", quantity="1", raw_text="1 onion"),
+                ParsedIngredient(name="onion (for blender)", quantity="1/2", raw_text="half onion"),
+                ParsedIngredient(name="rice", quantity="2 cups", raw_text="2 cups rice"),
+            ]
+        ),
+    )
+
+    links = {ri.ingredient.name: ri for ri in recipe.ingredients}
+    assert set(links) == {"onion", "rice"}
+    assert links["onion"].quantity == "1; 1/2"
+    assert links["onion"].raw_text == "1 onion; half onion"
+
+
+def test_update_recipe_folds_repeated_ingredient(db_session, raw_source):
+    recipe = persist_recipe(db_session, raw_source, _parsed_recipe())
+
+    update_recipe(
+        db_session,
+        recipe,
+        title="t",
+        steps=[],
+        cuisine=None,
+        meal_type=None,
+        cook_time_minutes=None,
+        ingredients=[IngredientSpec(name="rice", quantity="1 cup"), IngredientSpec(name="Rice")],
+    )
+
+    assert [(ri.ingredient.name, ri.quantity) for ri in recipe.ingredients] == [("rice", "1 cup")]
+
+
 def test_update_recipe_updates_scalar_fields(db_session, raw_source):
     recipe = persist_recipe(db_session, raw_source, _parsed_recipe())
 

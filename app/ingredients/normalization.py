@@ -32,3 +32,10 @@ def normalize_ingredient_name(name: str) -> str:
     text = _PAREN_RE.sub("", text)
     text = _WHITESPACE_RE.sub(" ", text).strip()
     return _SYNONYMS.get(text, text)
+
+
+def combine_quantities(*quantities: str | None) -> str | None:
+    """Join the quantities of lines that turned out to be the same ingredient
+    ("1", "2 more" -> "1; 2 more"), rather than silently keeping only one."""
+    distinct = list(dict.fromkeys(q for q in quantities if q))
+    return "; ".join(distinct) or None

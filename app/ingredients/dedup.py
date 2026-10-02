@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.ingredients.normalization import normalize_ingredient_name
+from app.ingredients.normalization import combine_quantities, normalize_ingredient_name
 from app.models import Ingredient, RecipeIngredient
 
 
@@ -31,11 +31,6 @@ class IngredientMerge:
     renamed_from: str | None = None
     links_repointed: int = 0
     links_combined: int = 0
-
-
-def _combine_quantities(*quantities: str | None) -> str | None:
-    distinct = list(dict.fromkeys(q for q in quantities if q))
-    return "; ".join(distinct) or None
 
 
 def merge_duplicate_ingredients(session: Session) -> list[IngredientMerge]:
@@ -74,7 +69,7 @@ def merge_duplicate_ingredients(session: Session) -> list[IngredientMerge]:
                 if survivor is None:
                     survivor_by_recipe[link.recipe_id] = link
                 else:
-                    survivor.quantity = _combine_quantities(survivor.quantity, link.quantity)
+                    survivor.quantity = combine_quantities(survivor.quantity, link.quantity)
                     session.delete(link)
                     merge.links_combined += 1
             session.flush()

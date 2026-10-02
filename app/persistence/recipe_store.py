@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.ingredients.normalization import normalize_ingredient_name
+from app.ingredients.normalization import combine_quantities, normalize_ingredient_name
 from app.models import Ingredient, RawSource, Recipe, RecipeIngredient
 from app.parsing.recipe_parser import ParsedRecipe
 
@@ -36,15 +36,22 @@ def _set_ingredients(
     recipe.ingredients.clear()
     session.flush()
 
+    # Two specs can normalize to one ingredient - a recipe listing "onion (for
+    # cooking)" and "onion (for blender)" - and a recipe may link an ingredient
+    # only once, so fold them into one link that keeps both quantities.
+    links: dict[int, RecipeIngredient] = {}
     for spec in ingredient_specs:
         ingredient = _get_or_create_ingredient(session, spec.name)
-        recipe.ingredients.append(
-            RecipeIngredient(
-                ingredient_id=ingredient.id,
-                quantity=spec.quantity,
-                raw_text=spec.raw_text or spec.name,
-            )
+        raw_text = spec.raw_text or spec.name
+        existing = links.get(ingredient.id)
+        if existing is not None:
+            existing.quantity = combine_quantities(existing.quantity, spec.quantity)
+            existing.raw_text = f"{existing.raw_text}; {raw_text}"
+            continue
+        links[ingredient.id] = RecipeIngredient(
+            ingredient_id=ingredient.id, quantity=spec.quantity, raw_text=raw_text
         )
+        recipe.ingredients.append(links[ingredient.id])
 
 
 def persist_recipe(session: Session, raw_source: RawSource, parsed: ParsedRecipe) -> Recipe:
