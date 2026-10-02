@@ -82,6 +82,32 @@ def test_ingest_recipe_manual_enqueues_task_with_caption(
     )
 
 
+def test_ingest_recipe_youtube_with_pasted_transcript_skips_fetch(
+    client, monkeypatch, db_session, test_user_id
+):
+    fake_fetch = MagicMock()
+    fake_manual = MagicMock()
+    fake_manual.delay.return_value.id = "task-paste"
+    monkeypatch.setattr("app.api.routes.ingest_youtube_task", fake_fetch)
+    monkeypatch.setattr("app.api.routes.ingest_manual_caption_task", fake_manual)
+
+    response = client.post(
+        "/recipes/ingest",
+        json={
+            "source_platform": "youtube",
+            "url": "https://youtube.com/watch?v=abc",
+            "caption_text": "today we make rice",
+        },
+    )
+
+    assert response.status_code == 202
+    fake_fetch.delay.assert_not_called()
+    # Stays labelled youtube - no more mislabelling a video as Instagram to paste it.
+    fake_manual.delay.assert_called_once_with(
+        test_user_id, "https://youtube.com/watch?v=abc", "today we make rice", "youtube"
+    )
+
+
 def _fake_async_result(monkeypatch, *, successful=False, failed=False, result=None):
     """Stubs the Celery result lookup and records which task id it was asked for,
     so tests can assert the route unwrapped the signed token before querying."""

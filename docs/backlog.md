@@ -20,13 +20,6 @@ bullet point six months from now).
   threatens Postgres, and the real fix is giving Postgres its own block volume.
   *Noted: 2026-09-27, during Phase 3.9.*
 
-- [ ] **Let YouTube URLs accept a pasted transcript.** When YouTube's anti-bot check refuses a fetch
-  (see ADR-0024), the user is told to paste the transcript — but the only manual path is the
-  `instagram` source, so they have to mislabel a YouTube video as Instagram to use it. The backend
-  already accepts `caption_text` for any non-YouTube platform; the change is to allow it for
-  `youtube` too and show the caption box when a YouTube fetch fails, pre-filled with the URL.
-  *Noted: 2026-09-27, while fixing the YouTube bot-check handling.*
-
 - [ ] **Session doesn't survive closing the browser tab.** The JWT lives only in Streamlit's
   `st.session_state` (`app/ui/streamlit_app.py`), which is tied to the server-side session for that
   browser connection — there's no localStorage, cookie, or query-param persistence. Closing the tab

@@ -39,16 +39,18 @@ def ingest_recipe(
     payload: IngestRequest,
     user_id: int = Depends(get_current_user_id),
 ) -> IngestAcceptedResponse:
-    if payload.source_platform == "youtube":
-        result = ingest_youtube_task.delay(user_id, payload.url)
-    else:
-        if not payload.caption_text:
-            raise HTTPException(
-                status_code=422,
-                detail="caption_text is required for non-YouTube sources",
-            )
+    if payload.caption_text:
+        # Pasted text wins for any platform - including YouTube, where it's the
+        # fallback when the server's fetch is refused by the anti-bot check (ADR-0024).
         result = ingest_manual_caption_task.delay(
             user_id, payload.url, payload.caption_text, payload.source_platform
+        )
+    elif payload.source_platform == "youtube":
+        result = ingest_youtube_task.delay(user_id, payload.url)
+    else:
+        raise HTTPException(
+            status_code=422,
+            detail="caption_text is required for non-YouTube sources",
         )
 
     # Signed rather than raw: Celery's result backend has no notion of who

@@ -144,8 +144,25 @@ st.header("Add a recipe")
 source_platform = st.radio("Source", ["youtube", "instagram"], horizontal=True)
 url = st.text_input("URL")
 caption_text = None
+fetch_warning = st.empty()  # cleared below once a pasted transcript succeeds
 if source_platform == "instagram":
     caption_text = st.text_area("Paste the caption text")
+else:
+    # The server's YouTube fetch can be refused by the anti-bot check (ADR-0024).
+    # When it was, for this same URL, open the paste box and say why - the URL
+    # field keeps its value, so the user only has to add the transcript.
+    failure = st.session_state.get("youtube_fetch_failure")
+    fetch_failed = bool(url) and failure is not None and failure["url"] == url
+    if fetch_failed:
+        fetch_warning.warning(
+            f"Couldn't fetch this video automatically: {failure['error']}\n\n"
+            "Paste the transcript (or the recipe from the video's description) below instead."
+        )
+    with st.expander("Paste the transcript instead", expanded=fetch_failed):
+        caption_text = st.text_area(
+            "Transcript or description text",
+            help="Optional. If filled in, this is used instead of fetching the video.",
+        )
 
 if st.button("Ingest recipe"):
     if not url:
@@ -167,6 +184,7 @@ if st.button("Ingest recipe"):
         else:
             # Ingestion now runs on a background worker (Celery + Redis, see
             # ADR-0013) - poll for completion instead of blocking on one call.
+            fetch_failure = None
             with st.status("Parsing recipe...") as status:
                 while True:
                     try:
@@ -181,13 +199,22 @@ if st.button("Ingest recipe"):
                         status.update(
                             label=f"Added: {result['recipe']['title']}", state="complete"
                         )
+                        st.session_state.youtube_fetch_failure = None
+                        fetch_warning.empty()
                         break
                     if result["state"] == "failure":
                         status.update(
                             label=f"Couldn't parse this recipe: {result['error']}", state="error"
                         )
+                        # Only an automatic fetch can be rescued by pasting; a pasted
+                        # transcript that failed to parse already took that route.
+                        if source_platform == "youtube" and not caption_text:
+                            fetch_failure = {"url": url, "error": result["error"]}
                         break
                     time.sleep(2)
+            if fetch_failure:
+                st.session_state.youtube_fetch_failure = fetch_failure
+                st.rerun()
 
 st.header("What can I make?")
 pantry_text = st.text_input("Ingredients you have (comma-separated)")
