@@ -316,6 +316,72 @@ def test_update_recipe_returns_404_for_another_users_recipe(client, db_session):
     assert response.status_code == 404
 
 
+def test_rate_recipe_sets_and_clears_rating(client, db_session, test_user_id):
+    recipe = _make_recipe(db_session, test_user_id)
+
+    response = client.put(f"/recipes/{recipe.id}/rating", json={"rating": 4})
+    assert response.status_code == 200
+    assert response.json()["rating"] == 4
+
+    response = client.put(f"/recipes/{recipe.id}/rating", json={"rating": None})
+    assert response.status_code == 200
+    assert response.json()["rating"] is None
+
+
+def test_rate_recipe_rejects_out_of_range(client, db_session, test_user_id):
+    recipe = _make_recipe(db_session, test_user_id)
+
+    for rating in (0, 6):
+        assert client.put(f"/recipes/{recipe.id}/rating", json={"rating": rating}).status_code == 422
+
+
+def test_rate_recipe_returns_404_for_another_users_recipe(client, db_session):
+    from tests.conftest import create_test_user
+
+    other_user_id = create_test_user(db_session, email="someone-else@example.com")
+    other_recipe = _make_recipe(db_session, other_user_id, title="Not Yours")
+
+    response = client.put(f"/recipes/{other_recipe.id}/rating", json={"rating": 1})
+
+    assert response.status_code == 404
+    db_session.refresh(other_recipe)
+    assert other_recipe.rating is None
+
+
+def test_editing_a_recipe_keeps_its_rating(client, db_session, test_user_id):
+    recipe = _make_recipe(db_session, test_user_id)
+    client.put(f"/recipes/{recipe.id}/rating", json={"rating": 5})
+
+    response = client.put(
+        f"/recipes/{recipe.id}", json={"title": "Renamed", "steps": [], "ingredients": []}
+    )
+
+    assert response.json()["rating"] == 5
+
+
+def test_list_recipes_by_rating_with_ingredient_filter_and_limit(client, db_session, test_user_id):
+    for title, rating, ingredient in [
+        ("ok chicken", 3, "chicken"),
+        ("best chicken", 5, "chicken thighs"),
+        ("unrated chicken", None, "chicken breast"),
+        ("best tofu", 5, "tofu"),
+    ]:
+        recipe = _make_recipe(db_session, test_user_id, title=title, ingredients=[ingredient])
+        recipe.rating = rating
+    db_session.flush()
+
+    response = client.get(
+        "/recipes", params={"sort": "rating", "ingredient": "chicken", "limit": 2}
+    )
+
+    assert response.status_code == 200
+    assert [r["title"] for r in response.json()] == ["best chicken", "ok chicken"]
+
+
+def test_list_recipes_rejects_unknown_sort(client):
+    assert client.get("/recipes", params={"sort": "random"}).status_code == 422
+
+
 def test_match_pantry_returns_ranked_matches(client, db_session, test_user_id):
     _make_recipe(db_session, test_user_id, title="Full Match", ingredients=["rice"])
     _make_recipe(db_session, test_user_id, title="No Match", ingredients=["durian"])

@@ -46,13 +46,3 @@ bullet point six months from now).
   path, the manual-paste-only flow may not be worth keeping as a distinct "platform" — consider
   removing Instagram as a source type rather than keeping a half-automated experience around.
   *Noted: 2026-10-02, requested as a future feature.*
-
-- [ ] **Recipe ratings + a ranked, filterable retrieval surfaced through the chatbot.** Roadmap's
-  Phase 4 already lists "Recipe photos, ratings, 'cooked this' tracking" as an unstarted item; this
-  sharpens the ask: rate recipes, then be able to pull a ranked list filterable by ingredient and
-  cuisine — and expose that as a chat tool (see [ADR-0011](adr/0011-chat-uses-tool-use-not-free-text-reasoning.md)
-  for why chat already works via tool-use, not free-text reasoning over all recipes), so "give me my
-  5 best chicken recipes" resolves to a real query (rating DESC, ingredient/cuisine filtered, limit
-  5) rather than the model guessing from context. Needs a `rating` column (or a separate ratings
-  table if multiple ratings per recipe ever matter), a matching API endpoint/query, and a new tool
-  definition for the chat tool-use loop. *Noted: 2026-10-02, requested as a future feature.*

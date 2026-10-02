@@ -137,7 +137,10 @@ deployed by tagging a release, with nightly off-node backups and a tested restor
   register/log in/log out through the real Streamlit UI, two accounts confirmed data-isolated, wrong
   password rejected, pre-existing account retained its recipes after getting a real password.
 - [ ] PWA / share-sheet shortcut for faster link capture
-- [ ] Recipe photos, ratings, "cooked this" tracking
+- [ ] Recipe photos, ratings, "cooked this" tracking — **ratings done**: 1-5 stars per recipe,
+  "Sort by: Highest rated" in the list, and a `top_rated_recipes` chat tool filterable by
+  ingredient and cuisine (see [ADR-0028](adr/0028-recipe-ratings-and-ranked-retrieval.md)).
+  Photos and "cooked this" still to do.
 - [ ] Weekly meal-plan generator from pantry + recipe list
 - [ ] Monitoring — CloudWatch or in-cluster Prometheus/Grafana, cost alerts
 

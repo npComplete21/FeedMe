@@ -33,13 +33,17 @@ def _usage() -> BetaUsage:
 
 
 def _tool_use_message(pantry: list[str]) -> BetaMessage:
+    return _named_tool_use_message("match_pantry", {"pantry": pantry})
+
+
+def _named_tool_use_message(name: str, tool_input: dict) -> BetaMessage:
     return BetaMessage(
         id="msg_1",
         type="message",
         role="assistant",
         model="claude-opus-4-8",
         content=[
-            BetaToolUseBlock(type="tool_use", id="tu_1", name="match_pantry", input={"pantry": pantry})
+            BetaToolUseBlock(type="tool_use", id="tu_1", name=name, input=tool_input)
         ],
         stop_reason="tool_use",
         stop_sequence=None,
@@ -165,6 +169,81 @@ def test_chat_history_omits_parsed_output_so_it_replays_cleanly(db_session, test
     assistant_message = result.messages[-1]
     for block in assistant_message["content"]:
         assert "parsed_output" not in block
+
+
+def _rated(db_session, user_id, title, ingredients, rating, cuisine=None):
+    recipe = _make_recipe(db_session, user_id, title, ingredients)
+    recipe.rating = rating
+    recipe.cuisine = cuisine
+    db_session.flush()
+    return recipe
+
+
+def _tool_result_text(result) -> str:
+    return result.messages[-2]["content"][0]["content"]
+
+
+def test_chat_top_rated_tool_ranks_by_rating_with_filters(db_session, test_user_id):
+    _rated(db_session, test_user_id, "Good Bulgogi", ["beef"], 4, "korean")
+    _rated(db_session, test_user_id, "Best Dakgalbi", ["chicken thighs"], 5, "korean")
+    _rated(db_session, test_user_id, "Meh Chicken Soup", ["chicken breast"], 2, "korean")
+    _rated(db_session, test_user_id, "Butter Chicken", ["chicken"], 5, "indian")
+
+    client = _mock_client(
+        _named_tool_use_message(
+            "top_rated_recipes", {"ingredient": "chicken", "cuisine": "Korean", "limit": 5}
+        ),
+        _text_message("Your best Korean chicken recipe is Best Dakgalbi."),
+    )
+
+    result = chat_about_recipes(
+        db_session, test_user_id, "my best korean chicken recipes?", client=client
+    )
+
+    lines = _tool_result_text(result).splitlines()
+    assert lines[0].startswith("Best Dakgalbi") and "rated 5/5" in lines[0]
+    assert lines[1].startswith("Meh Chicken Soup") and "rated 2/5" in lines[1]
+    assert len(lines) == 2  # beef and the Indian dish are filtered out
+
+
+def test_chat_top_rated_tool_says_when_nothing_is_rated(db_session, test_user_id):
+    _make_recipe(db_session, test_user_id, "Fried Rice", ["rice"])
+    client = _mock_client(
+        _named_tool_use_message("top_rated_recipes", {}),
+        _text_message("You haven't rated any recipes yet."),
+    )
+
+    result = chat_about_recipes(db_session, test_user_id, "favourites?", client=client)
+
+    text = _tool_result_text(result)
+    assert "Fried Rice (id=" in text and "unrated" in text
+    assert "None of these recipes have been rated yet." in text
+
+
+def test_chat_top_rated_tool_rejects_unknown_cuisine(db_session, test_user_id):
+    client = _mock_client(
+        _named_tool_use_message("top_rated_recipes", {"cuisine": "martian"}),
+        _text_message("I don't know that cuisine."),
+    )
+
+    result = chat_about_recipes(db_session, test_user_id, "best martian food", client=client)
+
+    assert _tool_result_text(result).startswith("Unknown cuisine. Use one of: italian")
+
+
+def test_chat_top_rated_tool_only_sees_the_users_own_recipes(db_session, test_user_id):
+    from tests.conftest import create_test_user
+
+    other = create_test_user(db_session, "other@feedme.local")
+    _rated(db_session, other, "Someone Else's Favourite", ["rice"], 5)
+    client = _mock_client(
+        _named_tool_use_message("top_rated_recipes", {}),
+        _text_message("No recipes."),
+    )
+
+    result = chat_about_recipes(db_session, test_user_id, "favourites?", client=client)
+
+    assert _tool_result_text(result) == "No saved recipes match those filters."
 
 
 @pytest.mark.integration

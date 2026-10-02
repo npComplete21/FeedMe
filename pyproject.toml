@@ -30,7 +30,8 @@ api = [
     "pyjwt>=2.9",
 ]
 ui = [
-    "streamlit>=1.38",
+    # st.feedback(default=...) for star ratings needs a recent release.
+    "streamlit>=1.50",
     "httpx>=0.27",
 ]
 dev = [

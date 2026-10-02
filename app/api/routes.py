@@ -13,6 +13,7 @@ from app.api.schemas import (
     IngestRequest,
     IngestStatusResponse,
     MatchRequest,
+    RatingUpdateRequest,
     RecipeMatchResponse,
     RecipeResponse,
     RecipeUpdateRequest,
@@ -20,6 +21,7 @@ from app.api.schemas import (
 from app.chat.recipe_chat import RecipeChatError, chat_about_recipes
 from app.matching.ingredient_matcher import MatchableIngredient, MatchableRecipe, match_recipes
 from app.models import Recipe
+from app.persistence.recipe_queries import RecipeSort, find_recipes
 from app.persistence.recipe_store import IngredientSpec, update_recipe
 from app.worker import celery_app, ingest_manual_caption_task, ingest_youtube_task
 
@@ -87,19 +89,32 @@ def list_recipes(
     cuisine: str | None = Query(None),
     meal_type: str | None = Query(None),
     max_cook_time_minutes: int | None = Query(None, ge=0),
+    ingredient: str | None = Query(None),
+    sort: RecipeSort = Query("newest"),
+    limit: int | None = Query(None, ge=1, le=100),
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
 ) -> list[RecipeResponse]:
-    query = select(Recipe).where(Recipe.user_id == user_id)
-    if cuisine is not None:
-        query = query.where(Recipe.cuisine == cuisine)
-    if meal_type is not None:
-        query = query.where(Recipe.meal_type == meal_type)
-    if max_cook_time_minutes is not None:
-        query = query.where(Recipe.cook_time_minutes <= max_cook_time_minutes)
-
-    recipes = db.scalars(query.order_by(Recipe.created_at.desc())).all()
+    recipes = find_recipes(
+        db,
+        user_id,
+        cuisine=cuisine,
+        meal_type=meal_type,
+        max_cook_time_minutes=max_cook_time_minutes,
+        ingredient=ingredient,
+        sort=sort,
+        limit=limit,
+    )
     return [recipe_to_response(r) for r in recipes]
+
+
+def _owned_recipe_or_404(db: Session, recipe_id: int, user_id: int) -> Recipe:
+    recipe = db.scalars(
+        select(Recipe).where(Recipe.id == recipe_id, Recipe.user_id == user_id)
+    ).first()
+    if recipe is None:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    return recipe
 
 
 @router.put("/recipes/{recipe_id}", response_model=RecipeResponse)
@@ -109,15 +124,9 @@ def update_recipe_route(
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
 ) -> RecipeResponse:
-    recipe = db.scalars(
-        select(Recipe).where(Recipe.id == recipe_id, Recipe.user_id == user_id)
-    ).first()
-    if recipe is None:
-        raise HTTPException(status_code=404, detail="Recipe not found")
-
     recipe = update_recipe(
         db,
-        recipe,
+        _owned_recipe_or_404(db, recipe_id, user_id),
         title=payload.title,
         steps=payload.steps,
         cuisine=payload.cuisine,
@@ -127,6 +136,20 @@ def update_recipe_route(
             IngredientSpec(name=i.name, quantity=i.quantity) for i in payload.ingredients
         ],
     )
+    db.commit()
+    db.refresh(recipe)
+    return recipe_to_response(recipe)
+
+
+@router.put("/recipes/{recipe_id}/rating", response_model=RecipeResponse)
+def rate_recipe(
+    recipe_id: int,
+    payload: RatingUpdateRequest,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+) -> RecipeResponse:
+    recipe = _owned_recipe_or_404(db, recipe_id, user_id)
+    recipe.rating = payload.rating
     db.commit()
     db.refresh(recipe)
     return recipe_to_response(recipe)

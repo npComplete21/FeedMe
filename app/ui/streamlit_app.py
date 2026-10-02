@@ -273,7 +273,7 @@ if prompt := st.chat_input("e.g. \"I have chicken, rice, and broccoli - what sho
 
 st.header("Your recipes")
 
-filter_cols = st.columns(3)
+filter_cols = st.columns(4)
 with filter_cols[0]:
     cuisine_filter = st.selectbox("Cuisine", ["Any", *CUISINES])
 with filter_cols[1]:
@@ -283,8 +283,10 @@ with filter_cols[2]:
         "Max cook time (min)", min_value=0, value=0, step=5,
         help="0 means no time limit",
     )
+with filter_cols[3]:
+    sort_label = st.selectbox("Sort by", ["Newest", "Highest rated"])
 
-params = {}
+params = {"sort": "rating" if sort_label == "Highest rated" else "newest"}
 if cuisine_filter != "Any":
     params["cuisine"] = cuisine_filter
 if meal_type_filter != "Any":
@@ -300,8 +302,21 @@ try:
 except httpx.HTTPError as exc:
     st.error(f"Couldn't load recipes: {exc}")
 
+def _save_rating(recipe_id: int, widget_key: str) -> None:
+    # st.feedback("stars") reports 0-4 (or None once un-selected); the API wants 1-5.
+    stars = st.session_state[widget_key]
+    try:
+        client.put(
+            f"/recipes/{recipe_id}/rating",
+            json={"rating": None if stars is None else stars + 1},
+        ).raise_for_status()
+    except httpx.HTTPError as exc:
+        st.toast(f"Couldn't save rating: {exc}")
+
+
+has_filters = any(k != "sort" for k in params)
 if not recipes:
-    st.write("No recipes match those filters." if params else "No recipes yet — add one above.")
+    st.write("No recipes match those filters." if has_filters else "No recipes yet — add one above.")
 for recipe in recipes:
     tags = []
     if recipe.get("cuisine"):
@@ -310,10 +325,21 @@ for recipe in recipes:
         tags.append(recipe["meal_type"].replace("_", " ").title())
     if recipe.get("cook_time_minutes"):
         tags.append(f"{recipe['cook_time_minutes']} min")
+    if recipe.get("rating"):
+        tags.append("★" * recipe["rating"])
     label = recipe["title"] + (f"  ·  {' · '.join(tags)}" if tags else "")
 
     with st.expander(label):
         st.markdown(f"[Source]({recipe['source_url']}) · {recipe['source_platform']}")
+        rating_key = f"rating-{recipe['id']}"
+        st.caption("Your rating")
+        st.feedback(
+            "stars",
+            key=rating_key,
+            default=recipe["rating"] - 1 if recipe.get("rating") else None,
+            on_change=_save_rating,
+            args=(recipe["id"], rating_key),
+        )
         st.write("**Ingredients:**")
         for ingredient in recipe["ingredients"]:
             quantity = f"{ingredient['quantity']} " if ingredient.get("quantity") else ""
