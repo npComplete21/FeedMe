@@ -21,6 +21,10 @@ class TokenResponse(BaseModel):
     access_token: str
 
 
+class CurrentUserResponse(BaseModel):
+    email: str
+
+
 class IngestRequest(BaseModel):
     source_platform: Literal["youtube", "instagram"]
     url: str

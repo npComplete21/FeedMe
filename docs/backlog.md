@@ -20,15 +20,6 @@ bullet point six months from now).
   threatens Postgres, and the real fix is giving Postgres its own block volume.
   *Noted: 2026-09-27, during Phase 3.9.*
 
-- [ ] **Session doesn't survive closing the browser tab.** The JWT lives only in Streamlit's
-  `st.session_state` (`app/ui/streamlit_app.py`), which is tied to the server-side session for that
-  browser connection — there's no localStorage, cookie, or query-param persistence. Closing the tab
-  (or a Streamlit process restart) forces re-login even though the JWT itself is still valid for
-  `JWT_EXPIRATION_DAYS`. Fix would be persisting the token client-side (e.g. a cookie, or
-  `localStorage` read back via a small JS/query-param bridge Streamlit doesn't support natively) so
-  reopening the app in the same browser session picks the token back up instead of re-hitting the
-  login gate. *Noted: 2026-09-27, requested as a future feature. Re-requested 2026-10-02.*
-
 - [ ] **Figure out if Instagram ingestion can work without copy-pasting the caption, or drop
   Instagram support entirely.** Today's Instagram path is manual-paste only (caption text + URL,
   see [ADR-0006](adr/0006-raw-source-staging-table.md)) — unlike YouTube, which auto-fetches via

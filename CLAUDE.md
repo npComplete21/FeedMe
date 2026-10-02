@@ -64,7 +64,8 @@ ADR-0014). Real accounts: `POST /auth/register` (email + password + `FEEDME_REGI
 in `.env` — generate with `python -c "import secrets; print(secrets.token_hex(32))"` and
 `python -c "import secrets; print(secrets.token_hex(16))"` respectively; `app/api/auth.py` and
 `app/api/auth_routes.py` fail fast with a clear message if either is missing. The Streamlit UI has its
-own login/register screen — log in once per browser session, no token to enter by hand. `curl`/`httpie`
+own login/register screen — the token is remembered in a cookie for its lifetime, so you log in
+once per browser per 14 days, no token to enter by hand (see ADR-0029). `curl`/`httpie`
 calls against the API directly need to call `/auth/login` first and pass the returned token.
 
 ## Deployment (Phase 3, in progress)

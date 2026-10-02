@@ -196,3 +196,32 @@ def test_recipes_are_isolated_between_users(unauthenticated_client, db_session):
 
     assert [r["title"] for r in alice_recipes] == ["Alice's Secret Recipe"]
     assert bob_recipes == []
+
+
+def test_me_returns_the_tokens_owner(unauthenticated_client, db_session):
+    from tests.conftest import create_test_user
+
+    user_id = create_test_user(db_session, email="me@example.com")
+    token = create_access_token(user_id)
+
+    response = unauthenticated_client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    assert response.json() == {"email": "me@example.com"}
+
+
+def test_me_requires_a_token(unauthenticated_client):
+    assert unauthenticated_client.get("/auth/me").status_code == 401
+
+
+def test_me_rejects_token_for_deleted_user(unauthenticated_client, db_session):
+    from tests.conftest import create_test_user
+
+    user_id = create_test_user(db_session, email="gone@example.com")
+    token = create_access_token(user_id)
+    db_session.delete(db_session.get(User, user_id))
+    db_session.commit()
+
+    response = unauthenticated_client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 401

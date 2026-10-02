@@ -1,3 +1,5 @@
+import base64
+import json
 import os
 import time
 
@@ -17,6 +19,81 @@ if "access_token" not in st.session_state:
     st.session_state.access_token = None
 if "user_email" not in st.session_state:
     st.session_state.user_email = None
+
+# Remembering a login across closed tabs (ADR-0029). The JWT is kept in a
+# browser cookie; Streamlit can read cookies (st.context.cookies) but has no API
+# to write one, so writes go through a tiny script on the next page render.
+TOKEN_COOKIE = "feedme_token"
+if "pending_cookie_script" not in st.session_state:
+    st.session_state.pending_cookie_script = None
+# st.context.cookies is a snapshot from when this tab connected, so after a
+# logout it still holds the old token - without this flag the session would
+# immediately log itself back in from that stale snapshot.
+if "ignore_remembered_token" not in st.session_state:
+    st.session_state.ignore_remembered_token = False
+
+
+def _token_seconds_left(token: str) -> int:
+    """Seconds until the JWT's own `exp`, so the cookie never outlives the token.
+    Read without verifying the signature - the API verifies; this is only a TTL."""
+    try:
+        segment = token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4)))
+        return max(0, int(claims["exp"] - time.time()))
+    except (IndexError, KeyError, TypeError, ValueError):
+        return 0
+
+
+def _cookie_script(value: str, max_age: int) -> str:
+    # json.dumps quotes and escapes the value for the JS string literal.
+    return (
+        "<script>document.cookie = "
+        f"{json.dumps(TOKEN_COOKIE)} + '=' + {json.dumps(value)} + "
+        f"'; Max-Age={max_age}; Path=/; SameSite=Strict' + "
+        "(location.protocol === 'https:' ? '; Secure' : '');</script>"
+    )
+
+
+def _log_in(token: str, email: str) -> None:
+    st.session_state.access_token = token
+    st.session_state.user_email = email
+    st.session_state.ignore_remembered_token = False
+    st.session_state.pending_cookie_script = _cookie_script(token, _token_seconds_left(token))
+
+
+def _log_out() -> None:
+    st.session_state.access_token = None
+    st.session_state.user_email = None
+    st.session_state.ignore_remembered_token = True
+    st.session_state.pending_cookie_script = _cookie_script("", 0)
+
+
+def _restore_remembered_login() -> None:
+    if st.session_state.access_token or st.session_state.ignore_remembered_token:
+        return
+    token = st.context.cookies.get(TOKEN_COOKIE)
+    if not token:
+        return
+    try:
+        response = httpx.get(
+            f"{API_BASE_URL}/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        )
+    except httpx.HTTPError:
+        return  # API unreachable - show the login screen, keep the cookie for next time
+    if response.status_code == 200:
+        st.session_state.access_token = token
+        st.session_state.user_email = response.json()["email"]
+    elif response.status_code == 401:
+        _log_out()  # expired or revoked - drop the cookie too
+
+
+_restore_remembered_login()
+if st.session_state.pending_cookie_script:
+    # Emitted on a run that doesn't immediately st.rerun(), so it reaches the browser.
+    st.html(st.session_state.pending_cookie_script, unsafe_allow_javascript=True)
+    st.session_state.pending_cookie_script = None
 
 
 def _error_detail(exc: httpx.HTTPStatusError) -> str:
@@ -47,8 +124,7 @@ def _show_login_screen() -> None:
                 except httpx.HTTPError as exc:
                     st.error(f"Request failed: {exc}")
                 else:
-                    st.session_state.access_token = response.json()["access_token"]
-                    st.session_state.user_email = email
+                    _log_in(response.json()["access_token"], email)
                     st.rerun()
 
     with register_tab:
@@ -73,8 +149,7 @@ def _show_login_screen() -> None:
                 except httpx.HTTPError as exc:
                     st.error(f"Request failed: {exc}")
                 else:
-                    st.session_state.access_token = response.json()["access_token"]
-                    st.session_state.user_email = email
+                    _log_in(response.json()["access_token"], email)
                     st.rerun()
 
 
@@ -88,8 +163,7 @@ def _handle_response(response: httpx.Response) -> None:
     # back to the login screen, instead of every call site below needing
     # its own expiry check.
     if response.status_code == 401:
-        st.session_state.access_token = None
-        st.session_state.user_email = None
+        _log_out()
         st.rerun()
 
 
@@ -108,8 +182,7 @@ with header_cols[0]:
     st.caption(f"Logged in as `{st.session_state.user_email}`")
 with header_cols[1]:
     if st.button("Log out"):
-        st.session_state.access_token = None
-        st.session_state.user_email = None
+        _log_out()
         st.rerun()
 
 
