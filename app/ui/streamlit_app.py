@@ -5,19 +5,11 @@ import httpx
 import streamlit as st
 from dotenv import load_dotenv
 
+from app.ui.vocabulary import CUISINES, MEAL_TYPES
+
 load_dotenv()
 
 API_BASE_URL = os.environ.get("FEEDME_API_URL", "http://localhost:8000")
-
-# Kept in sync by hand with Cuisine/MealType in app/parsing/recipe_parser.py.
-# Not imported directly - the UI is a pure HTTP client of the API (ADR-0004),
-# and importing backend code here would drag anthropic/sqlalchemy/etc. into
-# the UI's Docker image once Phase 2 splits them apart.
-CUISINES = [
-    "italian", "mexican", "chinese", "japanese", "korean", "indian", "thai",
-    "vietnamese", "american", "mediterranean", "french", "middle_eastern", "other",
-]
-MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack", "dessert", "drink", "appetizer"]
 
 st.set_page_config(page_title="FeedMe", page_icon="🍳")
 

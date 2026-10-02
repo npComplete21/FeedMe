@@ -36,5 +36,7 @@ to get two lists of strings.
 - Cost: the allowed list is a judgment call up front, and a genuinely novel cuisine gets bucketed
   into `"other"` rather than getting its own value, until someone extends the `Literal`
 - Cost: the UI's hardcoded option list can drift from the backend's if one is edited without the
-  other — accepted tradeoff, see rationale above; flagged as a watch item in
-  [docs/backlog.md](../backlog.md) if it becomes an actual problem in practice
+  other — accepted tradeoff, see rationale above. Mitigated 2026-10-02: the UI's copy lives in the
+  side-effect-free `app/ui/vocabulary.py`, and `tests/ui/test_vocabulary.py` asserts it equals the
+  backend `Literal`s, so a one-sided edit fails CI instead of shipping. The UI still never imports
+  backend code at runtime; only the test does.

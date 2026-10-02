@@ -10,13 +10,6 @@ bullet point six months from now).
 
 ---
 
-- [ ] **Watch for drift between the UI's hardcoded `CUISINES`/`MEAL_TYPES` lists and the backend's
-  `Cuisine`/`MealType` Literal types.** Deliberately duplicated rather than imported (see
-  [ADR-0009](adr/0009-tags-closed-vocabulary.md)) to keep the UI a pure HTTP client with no backend
-  imports. If the allowed values change often enough that this becomes annoying, consider a shared
-  constants module both sides can depend on without pulling in `anthropic`/`sqlalchemy`.
-  *Noted: 2026-07-17, during Phase 1.2.*
-
 - [ ] **Node disk grows with every deploy.** Each release adds per-commit image tags to containerd.
   Partly addressed 2026-09-27: kubelet image GC tightened from 85/80 to 70/55 and a
   `FeedmeNodeDiskFilling` alert added (see [ADR-0025](adr/0025-monitoring-and-alerting.md)), because
