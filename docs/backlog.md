@@ -29,14 +29,6 @@ bullet point six months from now).
   reopening the app in the same browser session picks the token back up instead of re-hitting the
   login gate. *Noted: 2026-09-27, requested as a future feature. Re-requested 2026-10-02.*
 
-- [ ] **Browse recipes by cuisine as big boxes, not a filter dropdown.** Today cuisine is one of the
-  filter controls in the recipe list (see [ADR-0009](adr/0009-tags-closed-vocabulary.md) for the
-  closed vocabulary). Requested instead: a browse view with one large tappable box per cuisine
-  (grid of cards), landing on that cuisine's recipes — filtering by *navigating*, not by
-  dropdown-and-apply. Pure UI/UX work in `app/ui/streamlit_app.py`; no backend change expected,
-  since the cuisine values already exist per-recipe. *Noted: 2026-10-02, requested as a future
-  feature.*
-
 - [ ] **Figure out if Instagram ingestion can work without copy-pasting the caption, or drop
   Instagram support entirely.** Today's Instagram path is manual-paste only (caption text + URL,
   see [ADR-0006](adr/0006-raw-source-staging-table.md)) — unlike YouTube, which auto-fetches via

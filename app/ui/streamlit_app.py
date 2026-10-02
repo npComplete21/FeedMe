@@ -273,34 +273,103 @@ if prompt := st.chat_input("e.g. \"I have chicken, rice, and broccoli - what sho
 
 st.header("Your recipes")
 
-filter_cols = st.columns(4)
+# Purely decorative - an unknown cuisine still gets a box, just with the plate.
+CUISINE_EMOJI = {
+    "italian": "🍝", "mexican": "🌮", "chinese": "🥟", "japanese": "🍣", "korean": "🥘",
+    "indian": "🍛", "thai": "🍜", "vietnamese": "🍲", "american": "🍔",
+    "mediterranean": "🫒", "french": "🥐", "middle_eastern": "🧆", "other": "🍽️",
+}
+
+
+def _cuisine_label(cuisine: str) -> str:
+    return cuisine.replace("_", " ").title()
+
+
+def _select_cuisine(cuisine: str | None) -> None:
+    st.session_state.selected_cuisine = cuisine
+
+
+if "selected_cuisine" not in st.session_state:
+    st.session_state.selected_cuisine = None
+
+filter_cols = st.columns(3)
 with filter_cols[0]:
-    cuisine_filter = st.selectbox("Cuisine", ["Any", *CUISINES])
-with filter_cols[1]:
     meal_type_filter = st.selectbox("Meal type", ["Any", *MEAL_TYPES])
-with filter_cols[2]:
+with filter_cols[1]:
     max_cook_time_filter = st.number_input(
         "Max cook time (min)", min_value=0, value=0, step=5,
         help="0 means no time limit",
     )
-with filter_cols[3]:
+with filter_cols[2]:
     sort_label = st.selectbox("Sort by", ["Newest", "Highest rated"])
 
+# Cuisine is deliberately NOT sent to the API: the boxes need a count for every
+# cuisine, so fetch once with the other filters and split by cuisine here.
 params = {"sort": "rating" if sort_label == "Highest rated" else "newest"}
-if cuisine_filter != "Any":
-    params["cuisine"] = cuisine_filter
 if meal_type_filter != "Any":
     params["meal_type"] = meal_type_filter
 if max_cook_time_filter:
     params["max_cook_time_minutes"] = int(max_cook_time_filter)
 
-recipes = []
+all_recipes = []
 try:
     response = client.get("/recipes", params=params)
     response.raise_for_status()
-    recipes = response.json()
+    all_recipes = response.json()
 except httpx.HTTPError as exc:
     st.error(f"Couldn't load recipes: {exc}")
+
+counts: dict[str, int] = {}
+for r in all_recipes:
+    if r.get("cuisine"):
+        counts[r["cuisine"]] = counts.get(r["cuisine"], 0) + 1
+
+selected_cuisine = st.session_state.selected_cuisine
+if selected_cuisine is not None and selected_cuisine not in counts:
+    # Its last recipe was filtered out or re-tagged - fall back to browsing.
+    selected_cuisine = st.session_state.selected_cuisine = None
+
+if selected_cuisine is None:
+    # Browse by navigating rather than a dropdown: one big box per cuisine that
+    # has recipes, in the closed vocabulary's order (ADR-0009).
+    present = [c for c in CUISINES if c in counts]
+    if present:
+        st.markdown(
+            "<style>.st-key-cuisine-grid button {min-height: 7rem;}"
+            " .st-key-cuisine-grid button [data-testid=stMarkdownContainer]"
+            " {display: flex; flex-direction: column; align-items: center;}"
+            " .st-key-cuisine-grid button p {margin: 0; font-size: 1.1rem;}"
+            " .st-key-cuisine-grid button p:first-child {font-size: 2rem;}</style>",
+            unsafe_allow_html=True,
+        )
+        with st.container(key="cuisine-grid"):
+            # Row by row, not one column per third: on a phone the columns stack,
+            # and this keeps the boxes in the same order there too.
+            for row_start in range(0, len(present), 3):
+                row = st.columns(3)
+                for col, cuisine in zip(row, present[row_start:row_start + 3]):
+                    col.button(
+                        # Button labels are markdown; blank lines make separate
+                        # paragraphs, which the CSS above sizes individually.
+                        f"{CUISINE_EMOJI.get(cuisine, '🍽️')}\n\n**{_cuisine_label(cuisine)}**\n\n"
+                        f"{counts[cuisine]} recipe{'s' if counts[cuisine] != 1 else ''}",
+                        key=f"cuisine-box-{cuisine}",
+                        on_click=_select_cuisine,
+                        args=(cuisine,),
+                        width="stretch",
+                    )
+        st.subheader("All recipes")
+    recipes = all_recipes
+else:
+    nav_cols = st.columns([4, 1])
+    with nav_cols[0]:
+        st.subheader(
+            f"{CUISINE_EMOJI.get(selected_cuisine, '🍽️')} {_cuisine_label(selected_cuisine)}"
+        )
+    with nav_cols[1]:
+        st.button("← All cuisines", on_click=_select_cuisine, args=(None,))
+    recipes = [r for r in all_recipes if r.get("cuisine") == selected_cuisine]
+
 
 def _save_rating(recipe_id: int, widget_key: str) -> None:
     # st.feedback("stars") reports 0-4 (or None once un-selected); the API wants 1-5.
