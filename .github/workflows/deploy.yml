@@ -121,3 +121,21 @@ jobs:
           done
           echo "site did not return 200 after 5 attempts" >&2
           exit 1
+
+      # Every release leaves the previous release's per-commit images in
+      # containerd, and the Postgres PVC shares that root disk (ADR-0025).
+      # Kubelet GC only reclaims them past 70%, so prune here instead: `rmi
+      # --prune` removes only images no container is using. Runs after the
+      # smoke test so a failed deploy keeps the old images for a fast rollback;
+      # a later rollback still works, it just re-pulls from GHCR. Non-fatal -
+      # the release is already live and healthy by this point, so a prune
+      # failure is a warning, not a failed deploy.
+      - name: Prune unused images on the node
+        run: |
+          set -uo pipefail
+          ssh -i ~/.ssh/deploy -o BatchMode=yes -o IdentitiesOnly=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'df -h / | tail -1 | awk "{print \"disk before: \" \$5 \" used\"}"
+             sudo -n /usr/local/bin/k3s crictl rmi --prune || exit 1
+             df -h / | tail -1 | awk "{print \"disk after:  \" \$5 \" used\"}"' \
+            || echo "::warning::image prune failed on the node - deploy is fine, but old images were not removed"
