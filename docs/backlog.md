@@ -17,7 +17,8 @@ bullet point six months from now).
   failed pull. Image growth itself addressed 2026-10-02: `deploy.yml` now runs
   `k3s crictl rmi --prune` on the node after each successful deploy, so manual pruning is no longer
   needed. What remains is the shared disk — anything that fills it (Prometheus TSDB, logs) still
-  threatens Postgres, and the real fix is giving Postgres its own block volume.
+  threatens Postgres, and the real fix is giving Postgres its own block volume — written up as a
+  step-by-step [runbook](runbooks/postgres-own-block-volume.md), needs OCI console + node access to run.
   *Noted: 2026-09-27, during Phase 3.9.*
 
 - [ ] **Figure out if Instagram ingestion can work without copy-pasting the caption, or drop
