@@ -50,13 +50,21 @@ def test_ingest_recipe_youtube_enqueues_task(client, monkeypatch, db_session, te
     fake_task.delay.assert_called_once_with(test_user_id, "https://youtube.com/watch?v=abc")
 
 
-def test_ingest_recipe_manual_requires_caption_text(client):
+def test_ingest_recipe_instagram_without_caption_fetches_it(
+    client, monkeypatch, db_session, test_user_id
+):
+    fake_task = MagicMock()
+    fake_task.delay.return_value.id = "task-ig"
+    monkeypatch.setattr("app.api.routes.ingest_instagram_task", fake_task)
+
     response = client.post(
         "/recipes/ingest",
         json={"source_platform": "instagram", "url": "https://instagram.com/reel/abc"},
     )
 
-    assert response.status_code == 422
+    assert response.status_code == 202
+    assert decode_task_token(response.json()["task_id"]) == ("task-ig", test_user_id)
+    fake_task.delay.assert_called_once_with(test_user_id, "https://instagram.com/reel/abc")
 
 
 def test_ingest_recipe_manual_enqueues_task_with_caption(

@@ -217,31 +217,43 @@ st.header("Add a recipe")
 source_platform = st.radio("Source", ["youtube", "instagram"], horizontal=True)
 url = st.text_input("URL")
 caption_text = None
-fetch_warning = st.empty()  # cleared below once a pasted transcript succeeds
-if source_platform == "instagram":
-    caption_text = st.text_area("Paste the caption text")
-else:
-    # The server's YouTube fetch can be refused by the anti-bot check (ADR-0024).
-    # When it was, for this same URL, open the paste box and say why - the URL
-    # field keeps its value, so the user only has to add the transcript.
-    failure = st.session_state.get("youtube_fetch_failure")
-    fetch_failed = bool(url) and failure is not None and failure["url"] == url
-    if fetch_failed:
-        fetch_warning.warning(
-            f"Couldn't fetch this video automatically: {failure['error']}\n\n"
-            "Paste the transcript (or the recipe from the video's description) below instead."
-        )
-    with st.expander("Paste the transcript instead", expanded=fetch_failed):
-        caption_text = st.text_area(
-            "Transcript or description text",
-            help="Optional. If filled in, this is used instead of fetching the video.",
-        )
+fetch_warning = st.empty()  # cleared below once a pasted caption succeeds
+
+# Both platforms are fetched automatically; when that fails (YouTube's anti-bot
+# check, ADR-0024; a private or uncaptioned Instagram post, ADR-0030) for this
+# same URL, open the paste box and say why - the URL field keeps its value, so
+# the user only has to add the text.
+PASTE_COPY = {
+    "youtube": (
+        "video", "Paste the transcript instead", "Transcript or description text",
+        "the transcript (or the recipe from the video's description)",
+    ),
+    "instagram": (
+        "post", "Paste the caption instead", "Caption text", "the post's caption",
+    ),
+}
+noun, expander_label, text_label, what_to_paste = PASTE_COPY[source_platform]
+failure = st.session_state.get("fetch_failure")
+fetch_failed = (
+    bool(url)
+    and failure is not None
+    and (failure["platform"], failure["url"]) == (source_platform, url)
+)
+if fetch_failed:
+    fetch_warning.warning(
+        f"Couldn't fetch this {noun} automatically: {failure['error']}\n\n"
+        f"Paste {what_to_paste} below instead."
+    )
+with st.expander(expander_label, expanded=fetch_failed):
+    caption_text = st.text_area(
+        text_label,
+        key=f"paste-{source_platform}",
+        help=f"Optional. If filled in, this is used instead of fetching the {noun}.",
+    )
 
 if st.button("Ingest recipe"):
     if not url:
         st.error("URL is required")
-    elif source_platform == "instagram" and not caption_text:
-        st.error("Caption text is required for Instagram")
     else:
         payload = {"source_platform": source_platform, "url": url}
         if caption_text:
@@ -272,21 +284,25 @@ if st.button("Ingest recipe"):
                         status.update(
                             label=f"Added: {result['recipe']['title']}", state="complete"
                         )
-                        st.session_state.youtube_fetch_failure = None
+                        st.session_state.fetch_failure = None
                         fetch_warning.empty()
                         break
                     if result["state"] == "failure":
                         status.update(
                             label=f"Couldn't parse this recipe: {result['error']}", state="error"
                         )
-                        # Only an automatic fetch can be rescued by pasting; a pasted
-                        # transcript that failed to parse already took that route.
-                        if source_platform == "youtube" and not caption_text:
-                            fetch_failure = {"url": url, "error": result["error"]}
+                        # Only an automatic fetch can be rescued by pasting; pasted
+                        # text that failed to parse already took that route.
+                        if not caption_text:
+                            fetch_failure = {
+                                "platform": source_platform,
+                                "url": url,
+                                "error": result["error"],
+                            }
                         break
                     time.sleep(2)
             if fetch_failure:
-                st.session_state.youtube_fetch_failure = fetch_failure
+                st.session_state.fetch_failure = fetch_failure
                 st.rerun()
 
 st.header("What can I make?")

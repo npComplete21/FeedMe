@@ -20,13 +20,3 @@ bullet point six months from now).
   threatens Postgres, and the real fix is giving Postgres its own block volume — written up as a
   step-by-step [runbook](runbooks/postgres-own-block-volume.md), needs OCI console + node access to run.
   *Noted: 2026-09-27, during Phase 3.9.*
-
-- [ ] **Figure out if Instagram ingestion can work without copy-pasting the caption, or drop
-  Instagram support entirely.** Today's Instagram path is manual-paste only (caption text + URL,
-  see [ADR-0006](adr/0006-raw-source-staging-table.md)) — unlike YouTube, which auto-fetches via
-  `yt-dlp` (modulo the anti-bot fallback in [ADR-0024](adr/0024-youtube-anti-bot-check.md)).
-  Needs research: does `yt-dlp` or another approach support pulling an Instagram Reel's caption
-  without a logged-in session or scraping that risks the account? If there's no clean automated
-  path, the manual-paste-only flow may not be worth keeping as a distinct "platform" — consider
-  removing Instagram as a source type rather than keeping a half-automated experience around.
-  *Noted: 2026-10-02, requested as a future feature.*

@@ -23,7 +23,12 @@ from app.matching.ingredient_matcher import MatchableIngredient, MatchableRecipe
 from app.models import Recipe
 from app.persistence.recipe_queries import RecipeSort, find_recipes
 from app.persistence.recipe_store import IngredientSpec, update_recipe
-from app.worker import celery_app, ingest_manual_caption_task, ingest_youtube_task
+from app.worker import (
+    celery_app,
+    ingest_instagram_task,
+    ingest_manual_caption_task,
+    ingest_youtube_task,
+)
 
 router = APIRouter(dependencies=[Depends(get_current_user_id)])
 
@@ -42,18 +47,15 @@ def ingest_recipe(
     user_id: int = Depends(get_current_user_id),
 ) -> IngestAcceptedResponse:
     if payload.caption_text:
-        # Pasted text wins for any platform - including YouTube, where it's the
-        # fallback when the server's fetch is refused by the anti-bot check (ADR-0024).
+        # Pasted text wins for any platform - it's the fallback when the server's
+        # own fetch fails (YouTube's anti-bot check, ADR-0024; Instagram, ADR-0030).
         result = ingest_manual_caption_task.delay(
             user_id, payload.url, payload.caption_text, payload.source_platform
         )
     elif payload.source_platform == "youtube":
         result = ingest_youtube_task.delay(user_id, payload.url)
     else:
-        raise HTTPException(
-            status_code=422,
-            detail="caption_text is required for non-YouTube sources",
-        )
+        result = ingest_instagram_task.delay(user_id, payload.url)
 
     # Signed rather than raw: Celery's result backend has no notion of who
     # owns a task, so the token is what lets ingest_status below prove it.

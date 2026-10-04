@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.api.converters import recipe_to_response
 from app.db import SessionLocal
-from app.ingestion.pipeline import ingest_manual_caption, ingest_youtube
+from app.ingestion.pipeline import ingest_instagram, ingest_manual_caption, ingest_youtube
 from app.ingestion.youtube import YouTubeFetchError
 from app.models import Recipe
 
@@ -60,6 +60,11 @@ def _run_ingest_task(
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=10)
 def ingest_youtube_task(self, user_id: int, url: str) -> dict:
     return _run_ingest_task(self, lambda db: ingest_youtube(db, user_id, url))
+
+
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=10)
+def ingest_instagram_task(self, user_id: int, url: str) -> dict:
+    return _run_ingest_task(self, lambda db: ingest_instagram(db, user_id, url))
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=10)

@@ -1,6 +1,7 @@
 import pytest
 
-from app.ingestion.pipeline import ingest_manual_caption, ingest_youtube
+from app.ingestion.instagram import InstagramSource
+from app.ingestion.pipeline import ingest_instagram, ingest_manual_caption, ingest_youtube
 from app.ingestion.youtube import YouTubeSource
 from app.models import RawSource, User
 from app.parsing.recipe_parser import ParsedIngredient, ParsedRecipe
@@ -91,3 +92,18 @@ def test_ingest_youtube_propagates_parse_failures(monkeypatch, db_session, user)
 
     with pytest.raises(RecipeParseError):
         ingest_youtube(db_session, user.id, "https://youtube.com/watch?v=abc")
+
+
+def test_ingest_instagram_orchestrates_fetch_parse_and_persist(monkeypatch, db_session, user):
+    url = "https://www.instagram.com/reel/abc123/"
+    monkeypatch.setattr(
+        "app.ingestion.pipeline.fetch_instagram_caption",
+        lambda u: InstagramSource(source_url=u, caption="2 cups rice, soy sauce"),
+    )
+    monkeypatch.setattr("app.ingestion.pipeline.parse_recipe", lambda raw_text: _parsed_recipe())
+
+    recipe = ingest_instagram(db_session, user.id, url)
+
+    assert recipe.source_platform == "instagram"
+    assert recipe.source_url == url
+    assert db_session.get(RawSource, recipe.raw_source_id).raw_text == "2 cups rice, soy sauce"
