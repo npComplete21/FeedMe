@@ -1,6 +1,6 @@
 # FeedMe
 
-A personal recipe app: collects recipes saved from Instagram/YouTube, parses them with Claude into
+A personal recipe app: collects recipes saved from Instagram/YouTube or recipe websites, parses them with Claude into
 structured data, and lets you search "what can I make?" against ingredients you have on hand.
 
 ## Start here, every session

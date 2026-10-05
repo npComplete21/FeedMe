@@ -214,13 +214,14 @@ def _select_index(options_with_sentinel: list[str], current_value: str | None) -
 
 
 st.header("Add a recipe")
-source_platform = st.radio("Source", ["youtube", "instagram"], horizontal=True)
+source_platform = st.radio("Source", ["youtube", "instagram", "website"], horizontal=True)
 url = st.text_input("URL")
 caption_text = None
 fetch_warning = st.empty()  # cleared below once a pasted caption succeeds
 
-# Both platforms are fetched automatically; when that fails (YouTube's anti-bot
-# check, ADR-0024; a private or uncaptioned Instagram post, ADR-0030) for this
+# Every source is fetched automatically; when that fails (YouTube's anti-bot
+# check, ADR-0024; a private or uncaptioned Instagram post, ADR-0030; a site that
+# blocks us or has no recipe on it, ADR-0031) for this
 # same URL, open the paste box and say why - the URL field keeps its value, so
 # the user only has to add the text.
 PASTE_COPY = {
@@ -230,6 +231,10 @@ PASTE_COPY = {
     ),
     "instagram": (
         "post", "Paste the caption instead", "Caption text", "the post's caption",
+    ),
+    "website": (
+        "page", "Paste the recipe instead", "Recipe text",
+        "the recipe's ingredients and steps",
     ),
 }
 noun, expander_label, text_label, what_to_paste = PASTE_COPY[source_platform]

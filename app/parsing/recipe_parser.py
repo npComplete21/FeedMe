@@ -10,8 +10,8 @@ DEFAULT_MODEL = "claude-opus-4-8"
 MODEL = os.environ.get("RECIPE_PARSER_MODEL", DEFAULT_MODEL)
 
 _SYSTEM_PROMPT = (
-    "You extract structured recipes from raw social media captions or video "
-    "transcripts. Only use information present in the text - do not invent "
+    "You extract structured recipes from raw social media captions, video "
+    "transcripts, or recipe web pages. Only use information present in the text - do not invent "
     "ingredients, quantities, or steps that aren't there. If a quantity isn't "
     "stated for an ingredient, omit it rather than guessing. Likewise, only set "
     "cuisine, meal_type, or cook_time_minutes when the text actually supports "

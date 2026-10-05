@@ -1,7 +1,13 @@
 import pytest
 
 from app.ingestion.instagram import InstagramSource
-from app.ingestion.pipeline import ingest_instagram, ingest_manual_caption, ingest_youtube
+from app.ingestion.pipeline import (
+    ingest_instagram,
+    ingest_manual_caption,
+    ingest_website,
+    ingest_youtube,
+)
+from app.ingestion.website import WebsiteSource
 from app.ingestion.youtube import YouTubeSource
 from app.models import RawSource, User
 from app.parsing.recipe_parser import ParsedIngredient, ParsedRecipe
@@ -107,3 +113,22 @@ def test_ingest_instagram_orchestrates_fetch_parse_and_persist(monkeypatch, db_s
     assert recipe.source_platform == "instagram"
     assert recipe.source_url == url
     assert db_session.get(RawSource, recipe.raw_source_id).raw_text == "2 cups rice, soy sauce"
+
+
+def test_ingest_website_orchestrates_fetch_parse_and_persist(monkeypatch, db_session, user):
+    url = "https://blog.example/gochujang-chicken/"
+    monkeypatch.setattr(
+        "app.ingestion.pipeline.fetch_website_recipe",
+        lambda u: WebsiteSource(
+            source_url=u, title="Gochujang Chicken", text="Ingredients:\n- rice",
+            image_url="https://blog.example/c.jpg",
+        ),
+    )
+    monkeypatch.setattr("app.ingestion.pipeline.parse_recipe", lambda raw_text: _parsed_recipe())
+
+    recipe = ingest_website(db_session, user.id, url)
+
+    assert recipe.source_platform == "website"
+    assert recipe.source_url == url
+    raw_source = db_session.get(RawSource, recipe.raw_source_id)
+    assert (raw_source.title, raw_source.thumbnail_url) == ("Gochujang Chicken", "https://blog.example/c.jpg")

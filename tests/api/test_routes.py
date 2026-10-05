@@ -90,6 +90,27 @@ def test_ingest_recipe_manual_enqueues_task_with_caption(
     )
 
 
+def test_ingest_recipe_website_enqueues_fetch(client, monkeypatch, db_session, test_user_id):
+    fake_task = MagicMock()
+    fake_task.delay.return_value.id = "task-web"
+    monkeypatch.setattr("app.api.routes.ingest_website_task", fake_task)
+
+    response = client.post(
+        "/recipes/ingest",
+        json={"source_platform": "website", "url": "https://blog.example/gochujang-chicken/"},
+    )
+
+    assert response.status_code == 202
+    assert decode_task_token(response.json()["task_id"]) == ("task-web", test_user_id)
+    fake_task.delay.assert_called_once_with(test_user_id, "https://blog.example/gochujang-chicken/")
+
+
+def test_ingest_recipe_rejects_unknown_platform(client):
+    response = client.post("/recipes/ingest", json={"source_platform": "tiktok", "url": "x"})
+
+    assert response.status_code == 422
+
+
 def test_ingest_recipe_youtube_with_pasted_transcript_skips_fetch(
     client, monkeypatch, db_session, test_user_id
 ):

@@ -27,6 +27,7 @@ from app.worker import (
     celery_app,
     ingest_instagram_task,
     ingest_manual_caption_task,
+    ingest_website_task,
     ingest_youtube_task,
 )
 
@@ -48,12 +49,15 @@ def ingest_recipe(
 ) -> IngestAcceptedResponse:
     if payload.caption_text:
         # Pasted text wins for any platform - it's the fallback when the server's
-        # own fetch fails (YouTube's anti-bot check, ADR-0024; Instagram, ADR-0030).
+        # own fetch fails (YouTube's anti-bot check, ADR-0024; Instagram, ADR-0030;
+        # a website that blocks us or has no recipe on it, ADR-0031).
         result = ingest_manual_caption_task.delay(
             user_id, payload.url, payload.caption_text, payload.source_platform
         )
     elif payload.source_platform == "youtube":
         result = ingest_youtube_task.delay(user_id, payload.url)
+    elif payload.source_platform == "website":
+        result = ingest_website_task.delay(user_id, payload.url)
     else:
         result = ingest_instagram_task.delay(user_id, payload.url)
 

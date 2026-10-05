@@ -26,7 +26,7 @@ class CurrentUserResponse(BaseModel):
 
 
 class IngestRequest(BaseModel):
-    source_platform: Literal["youtube", "instagram"]
+    source_platform: Literal["youtube", "instagram", "website"]
     url: str
     caption_text: str | None = None
 

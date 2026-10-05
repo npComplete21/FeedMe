@@ -136,6 +136,8 @@ deployed by tagging a release, with nightly off-node backups and a tested restor
   a bounded (~50 user) rollout (see [ADR-0015](adr/0015-jwt-multi-user-auth.md)). Verified live:
   register/log in/log out through the real Streamlit UI, two accounts confirmed data-isolated, wrong
   password rejected, pre-existing account retained its recipes after getting a real password.
+- [x] Recipes from website URLs — schema.org Recipe JSON-LD first, visible text as fallback,
+  public-addresses-only fetching (see [ADR-0031](adr/0031-recipes-from-website-urls.md))
 - [ ] PWA / share-sheet shortcut for faster link capture
 - [ ] Recipe photos, ratings, "cooked this" tracking — **ratings done**: 1-5 stars per recipe,
   "Sort by: Highest rated" in the list, and a `top_rated_recipes` chat tool filterable by
