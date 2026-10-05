@@ -28,5 +28,7 @@ EXPOSE 8000
 # Apply any pending migrations before serving. Safe for a single-instance
 # stack because every migration in this project is additive/backward-
 # compatible by convention - see ADR-0012 for the reasoning and its limits
-# once there's more than one API replica.
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# once there's more than one API replica. The ingredient merge is idempotent
+# data cleanup that belongs with migrations (ADR-0027); k8s/api.yaml's init
+# container runs the same pair.
+CMD ["sh", "-c", "alembic upgrade head && python -m app.ingredients.dedup && uvicorn app.main:app --host 0.0.0.0 --port 8000"]

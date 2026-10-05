@@ -44,6 +44,15 @@ spec:
                 secretKeyRef:
                   name: feedme-secrets
                   key: ANTHROPIC_API_KEY
+            # Optional Meta app token for Instagram oEmbed (ADR-0030). The
+            # endpoint works without one at lower rate limits, so a missing key
+            # must not stop the pod from starting - hence optional: true.
+            - name: INSTAGRAM_OEMBED_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: feedme-secrets
+                  key: INSTAGRAM_OEMBED_TOKEN
+                  optional: true
           volumeMounts:
             - name: youtube-cookies
               mountPath: /etc/yt-dlp

@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 
+from app.ingestion.instagram import fetch_instagram_caption, save_instagram_source
 from app.ingestion.manual import save_manual_caption
 from app.ingestion.youtube import fetch_youtube_transcript, save_youtube_source
 from app.models import Recipe
@@ -10,6 +11,13 @@ from app.persistence.recipe_store import persist_recipe
 def ingest_youtube(session: Session, user_id: int, url: str) -> Recipe:
     source = fetch_youtube_transcript(url)
     raw_source = save_youtube_source(session, user_id, source)
+    parsed = parse_recipe(raw_source.raw_text)
+    return persist_recipe(session, raw_source, parsed)
+
+
+def ingest_instagram(session: Session, user_id: int, url: str) -> Recipe:
+    source = fetch_instagram_caption(url)
+    raw_source = save_instagram_source(session, user_id, source)
     parsed = parse_recipe(raw_source.raw_text)
     return persist_recipe(session, raw_source, parsed)
 

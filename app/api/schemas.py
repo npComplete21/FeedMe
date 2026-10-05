@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.parsing.recipe_parser import Cuisine, MealType
 
@@ -19,6 +19,10 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
+
+
+class CurrentUserResponse(BaseModel):
+    email: str
 
 
 class IngestRequest(BaseModel):
@@ -60,7 +64,14 @@ class RecipeResponse(BaseModel):
     cuisine: str | None = None
     meal_type: str | None = None
     cook_time_minutes: int | None = None
+    rating: int | None = None
     created_at: datetime
+
+
+class RatingUpdateRequest(BaseModel):
+    # null clears the rating. Separate from RecipeUpdateRequest, whose full-replace
+    # semantics (ADR-0010) would otherwise wipe a rating on every content edit.
+    rating: int | None = Field(ge=1, le=5)
 
 
 class IngestStatusResponse(BaseModel):

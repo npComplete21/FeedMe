@@ -16,5 +16,6 @@ def recipe_to_response(recipe: Recipe) -> RecipeResponse:
         cuisine=recipe.cuisine,
         meal_type=recipe.meal_type,
         cook_time_minutes=recipe.cook_time_minutes,
+        rating=recipe.rating,
         created_at=recipe.created_at,
     )

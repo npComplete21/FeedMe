@@ -1,6 +1,15 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    SmallInteger,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -21,7 +30,10 @@ class User(Base):
     password_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(_TIMESTAMP, server_default=func.now())
 
-    recipes: Mapped[list["Recipe"]] = relationship(back_populates="user")
+    # passive_deletes: leave removing a deleted user's recipes to the database's
+    # ON DELETE CASCADE, instead of the ORM default of nulling out recipes.user_id
+    # first - which would violate its NOT NULL before the cascade ever ran.
+    recipes: Mapped[list["Recipe"]] = relationship(back_populates="user", passive_deletes=True)
 
 
 class RawSource(Base):
@@ -32,7 +44,9 @@ class RawSource(Base):
     __tablename__ = "raw_sources"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     source_url: Mapped[str] = mapped_column(String)
     source_platform: Mapped[str] = mapped_column(String)
     raw_text: Mapped[str] = mapped_column(Text)
@@ -45,11 +59,16 @@ class RawSource(Base):
 
 class Recipe(Base):
     __tablename__ = "recipes"
+    __table_args__ = (
+        CheckConstraint("rating BETWEEN 1 AND 5", name="ck_recipes_rating_range"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     raw_source_id: Mapped[int | None] = mapped_column(
-        ForeignKey("raw_sources.id"), nullable=True
+        ForeignKey("raw_sources.id", ondelete="SET NULL"), nullable=True
     )
     source_url: Mapped[str] = mapped_column(String)
     source_platform: Mapped[str] = mapped_column(String)
@@ -59,6 +78,9 @@ class Recipe(Base):
     meal_type: Mapped[str | None] = mapped_column(String, nullable=True)
     cook_time_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     raw_source_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The owner's 1-5 star rating; NULL until they rate it. A column, not a
+    # ratings table, because a recipe only ever has one owner (ADR-0028).
+    rating: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(_TIMESTAMP, server_default=func.now())
 
     user: Mapped["User"] = relationship(back_populates="recipes")
@@ -80,7 +102,9 @@ class RecipeIngredient(Base):
     __table_args__ = (UniqueConstraint("recipe_id", "ingredient_id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    recipe_id: Mapped[int] = mapped_column(ForeignKey("recipes.id"), nullable=False)
+    recipe_id: Mapped[int] = mapped_column(
+        ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False
+    )
     ingredient_id: Mapped[int] = mapped_column(ForeignKey("ingredients.id"), nullable=False)
     quantity: Mapped[str | None] = mapped_column(String, nullable=True)
     raw_text: Mapped[str | None] = mapped_column(String, nullable=True)

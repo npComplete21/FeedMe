@@ -25,7 +25,9 @@ spec:
         - name: migrate
           image: feedme-api:latest
           imagePullPolicy: IfNotPresent
-          command: ["alembic", "upgrade", "head"]
+          # The ingredient merge rides along: it's idempotent, and has to run
+          # after any migration it depends on - see ADR-0027.
+          command: ["sh", "-c", "alembic upgrade head && python -m app.ingredients.dedup"]
           env:
             - name: DATABASE_URL
               valueFrom:

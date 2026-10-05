@@ -5,8 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.auth import create_access_token, hash_password, verify_password
-from app.api.deps import get_db
-from app.api.schemas import LoginRequest, RegisterRequest, TokenResponse
+from app.api.deps import get_current_user_id, get_db
+from app.api.schemas import CurrentUserResponse, LoginRequest, RegisterRequest, TokenResponse
 from app.models import User
 
 # Fails fast, same reasoning as JWT_SECRET_KEY (app/api/auth.py) - don't run
@@ -51,3 +51,17 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     return TokenResponse(access_token=create_access_token(user.id))
+
+
+@router.get("/me", response_model=CurrentUserResponse)
+def me(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+) -> CurrentUserResponse:
+    """Who a token belongs to. Lets the UI restore a session from a remembered
+    token (ADR-0029) - validating it and learning the email in one call."""
+    user = db.get(User, user_id)
+    if user is None:
+        # A valid signature for an account that has since been deleted.
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    return CurrentUserResponse(email=user.email)
