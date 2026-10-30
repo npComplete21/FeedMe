@@ -4,7 +4,7 @@
 
 **Goal:** Replace the single-scroll Streamlit script with a phone-first, four-tab app (Recipes, Pantry, ＋ Save, Ask) plus a recipe page, with no backend change.
 
-**Architecture:** `app/ui/streamlit_app.py` becomes a thin entry file: auth gate, hidden `st.navigation`, a fixed bottom tab bar, then `nav.run()`. Each screen is a file in `app/ui/pages/`. Pure logic (URL→platform, search, counts, text parsing) lives in `app/ui/logic.py` and is unit-tested; shared plumbing lives in `app/ui/auth.py`, `app/ui/api.py`, `app/ui/nav.py`, `app/ui/components.py`.
+**Architecture:** `app/ui/streamlit_app.py` becomes a thin entry file: auth gate, hidden `st.navigation`, a fixed bottom tab bar, then `nav.run()`. Each screen is a file in `app/ui/views/`. Pure logic (URL→platform, search, counts, text parsing) lives in `app/ui/logic.py` and is unit-tested; shared plumbing lives in `app/ui/auth.py`, `app/ui/api.py`, `app/ui/nav.py`, `app/ui/components.py`.
 
 **Tech Stack:** Streamlit ≥ 1.50 (1.59.2 installed), httpx, pytest + `streamlit.testing.v1.AppTest`.
 
@@ -62,7 +62,7 @@
 ### Task 2: App shell — entry file, auth, API client, tab bar
 
 **Files:**
-- Create: `app/ui/auth.py`, `app/ui/api.py`, `app/ui/nav.py`, `app/ui/pages/__init__.py`, and stub pages `app/ui/pages/{recipes,pantry,save,ask,recipe}.py` (each just `st.write("<name> — coming next")`; real content arrives in Tasks 3–7)
+- Create: `app/ui/auth.py`, `app/ui/api.py`, `app/ui/nav.py`, `app/ui/views/__init__.py`, and stub pages `app/ui/views/{recipes,pantry,save,ask,recipe}.py` (each just `st.write("<name> — coming next")`; real content arrives in Tasks 3–7)
 - Modify: `app/ui/streamlit_app.py` (rewrite as the thin entry file), `docs/roadmap.md` (add "Phase 5 — Mobile-first UI" with subphases 5.1 shell, 5.2 Recipes tab, 5.3 Recipe page, 5.4 Save, 5.5 Pantry, 5.6 Ask, 5.7 cleanup + docs; this task ticks 5.1)
 - Test: `tests/ui/test_shell.py`
 
@@ -70,7 +70,7 @@
 - Produces:
   - `auth.py`: move, unchanged in behaviour, the cookie/login code from the old script: `require_login() -> None` (restores remembered login, emits the pending cookie script, shows the Log in / Register tabs and `st.stop()`s when not logged in), `log_out() -> None`.
   - `api.py`: `get_client() -> httpx.Client` (base URL from `FEEDME_API_URL`, bearer header from `st.session_state.access_token`, response hook that calls `auth.log_out()` + `st.rerun()` on 401), `error_detail(exc: httpx.HTTPStatusError) -> str`.
-  - `nav.py`: `render_header() -> None` (app name left; account `st.popover` right showing the email and a Log out button), `render_tab_bar() -> None`, `open_recipe(recipe_id: int) -> None` (sets `st.session_state.open_recipe_id`, then `st.switch_page("pages/recipe.py")`).
+  - `nav.py`: `render_header() -> None` (app name left; account `st.popover` right showing the email and a Log out button), `render_tab_bar() -> None`, `open_recipe(recipe_id: int) -> None` (sets `st.session_state.open_recipe_id`, then `st.switch_page("views/recipe.py")`).
   - Entry file order: `st.set_page_config(page_title="FeedMe", page_icon="🍳", layout="centered", initial_sidebar_state="collapsed")` → `auth.require_login()` → `st.navigation([...5 pages, Recipes default, recipe page with url_path="recipe"], position="hidden")` → inject mobile CSS → `render_header()` → `render_tab_bar()` → `page.run()`.
 
 - [ ] **Step 1: Write failing tests** in `tests/ui/test_shell.py` using `AppTest.from_file("app/ui/streamlit_app.py")`: `test_logged_out_shows_login_not_tabs` (no `access_token` → a "Log in" tab/button exists and no tab-bar page links), `test_logged_in_renders_four_tabs` (set `at.session_state["access_token"]="t"`, `user_email`, monkeypatch `app.ui.api.get_client` to a stub whose `get` returns an empty list; assert page links labelled Recipes, Pantry, Save, Ask exist and none labelled Plan), `test_401_logs_out` (stub client whose hook-equivalent path calls `auth.log_out`; assert token cleared).
@@ -86,7 +86,7 @@
 
 **Files:**
 - Create: `app/ui/components.py`
-- Modify: `app/ui/pages/recipes.py`
+- Modify: `app/ui/views/recipes.py`
 - Test: `tests/ui/test_recipes_page.py`
 
 **Interfaces:**
@@ -106,7 +106,7 @@
 ### Task 4: Recipe page — read, rate, edit
 
 **Files:**
-- Modify: `app/ui/pages/recipe.py`
+- Modify: `app/ui/views/recipe.py`
 - Test: `tests/ui/test_recipe_page.py`
 
 **Interfaces:**
@@ -125,7 +125,7 @@
 ### Task 5: Save (＋)
 
 **Files:**
-- Modify: `app/ui/pages/save.py`
+- Modify: `app/ui/views/save.py`
 - Test: `tests/ui/test_save_page.py`
 
 **Interfaces:**
@@ -144,7 +144,7 @@
 ### Task 6: Pantry tab
 
 **Files:**
-- Modify: `app/ui/pages/pantry.py`
+- Modify: `app/ui/views/pantry.py`
 - Test: `tests/ui/test_pantry_page.py`
 
 **Interfaces:**
@@ -163,7 +163,7 @@
 ### Task 7: Ask tab
 
 **Files:**
-- Modify: `app/ui/pages/ask.py`
+- Modify: `app/ui/views/ask.py`
 - Test: `tests/ui/test_ask_page.py`
 
 **Interfaces:**
@@ -182,10 +182,10 @@
 ### Task 8: Cleanup, docs, full pass
 
 **Files:**
-- Modify: `docs/roadmap.md` (tick 5.7, mark Phase 5 complete only after the full pass), `CLAUDE.md` (Architecture section: UI is now an entry file plus `app/ui/pages/`; keep the `streamlit run app/ui/streamlit_app.py` command unchanged), `docs/adr/0004-streamlit-for-phase-0-ui.md` (add a status note pointing to ADR-0032)
+- Modify: `docs/roadmap.md` (tick 5.7, mark Phase 5 complete only after the full pass), `CLAUDE.md` (Architecture section: UI is now an entry file plus `app/ui/views/`; keep the `streamlit run app/ui/streamlit_app.py` command unchanged), `docs/adr/0004-streamlit-for-phase-0-ui.md` (add a status note pointing to ADR-0032)
 - Create: `docs/adr/0032-mobile-first-ui-on-streamlit.md` (template `docs/adr/template.md`: Context / Decision / Consequences, including why not a PWA/real frontend yet, the hidden-nav + CSS tab bar and its fragility, client-side search, `?recipe=` addressing, the removed meal-type/cook-time filters, and that PWA/share-sheet is the next revisit trigger)
 
-- [ ] **Step 1: Confirm nothing dead remains**: `grep -rn "st.header(\"Add a recipe\")\|PASTE_COPY" app/ui` returns only `pages/save.py`; the old single-script code is fully gone from `streamlit_app.py`.
+- [ ] **Step 1: Confirm nothing dead remains**: `grep -rn "st.header(\"Add a recipe\")\|PASTE_COPY" app/ui` returns only `views/save.py`; the old single-script code is fully gone from `streamlit_app.py`.
 - [ ] **Step 2: Full test run**: `/Users/yashpundlik/PycharmProjects/FeedMe/.venv/bin/python -m pytest -q`. Expected: PASS (whole suite, not just `tests/ui`).
 - [ ] **Step 3: Containerised pass**: `docker compose up -d --build`, then at `resize_window` mobile walk the user's own scenario end to end: open → tap ＋ → paste a YouTube Short link → open the saved recipe → rate → Recipes → search it → Pantry → Ask. Also repeat at the tablet and desktop presets to confirm nothing breaks.
 - [ ] **Step 4: Write ADR-0032 and the doc edits.**

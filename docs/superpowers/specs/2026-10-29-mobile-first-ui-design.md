@@ -111,7 +111,7 @@ user came from.
    `GET /recipes/{id}` only if this proves awkward.
 3. **Four tabs, no Plan tab** until the meal planner exists.
 4. **Code shape.** Split `streamlit_app.py` into an entry file (auth, nav, tab bar) and one file per
-   page under `app/ui/pages/`, with shared helpers (`client`, `_error_detail`, auth) in a small
+   page under `app/ui/views/`, with shared helpers (`client`, `_error_detail`, auth) in a small
    module. The 560-line monolith goes away.
 5. **Delivery as small, individually committed steps**, each live-checked before the next:
    shell (nav + tab bar + mobile CSS + auth) → Recipes tab (search, cuisines, lists, ordering) →
