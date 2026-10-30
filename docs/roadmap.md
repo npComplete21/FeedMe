@@ -157,7 +157,7 @@ Goal: replace the single-scroll Streamlit script with a phone-first app — four
   mobile CSS; auth/cookie code moved to `app/ui/auth.py`, the API client and global 401 handler to
   `app/ui/api.py`. Screens live in `app/ui/views/` (not `pages/`, which would switch on
   Streamlit's legacy folder navigation) and are stubs until 5.2–5.6. Verified live at phone width.
-- [ ] 5.2 Recipes tab — search bar, cuisine boxes, lists ordered by rating
+- [x] 5.2 Recipes tab — search bar, cuisine boxes, lists ordered by rating
 - [ ] 5.3 Recipe page — read, rate, edit behind a button, addressed by `?recipe=<id>`
 - [ ] 5.4 Save (＋) — paste a link, platform detected from the URL, paste-text fallback kept
 - [ ] 5.5 Pantry tab — "what can I make?", remembered for the session

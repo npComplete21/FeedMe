@@ -62,7 +62,8 @@ def test_logged_in_lands_on_recipes_by_default(monkeypatch):
     at.session_state["user_email"] = "cook@example.com"
     at.run()
 
-    assert any("Recipes" in md.value for md in at.markdown)
+    # The Recipes page ran: its search box is there (the stub library is empty).
+    assert [ti.key for ti in at.text_input] == ["recipes_query_widget"]
 
 
 def _script_that_gets_a_401():

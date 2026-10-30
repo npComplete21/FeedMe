@@ -38,6 +38,27 @@ header[data-testid="stHeader"] {{ display: none; }}
   min-height: 2.75rem;
 }}
 
+/* Recipe rows (components.recipe_row): left-aligned title, muted tag line. */
+[class*="st-key-recipe-row-"] button {{
+  justify-content: flex-start;
+  text-align: left;
+  height: auto;
+  padding: 0.6rem 0.9rem;
+}}
+[class*="st-key-recipe-row-"] button > div,
+[class*="st-key-recipe-row-"] button > div > span {{
+  width: 100%;
+  justify-content: flex-start;
+}}
+[class*="st-key-recipe-row-"] button [data-testid="stMarkdownContainer"] {{
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+}}
+[class*="st-key-recipe-row-"] button p {{ margin: 0; }}
+[class*="st-key-recipe-row-"] button p + p {{ font-size: 0.85rem; opacity: 0.7; }}
+
 /* Header: app name left, account control right. */
 .st-key-app-header [data-testid="stMarkdown"] p {{
   margin: 0; font-size: 1.25rem; font-weight: 700;
