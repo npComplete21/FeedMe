@@ -137,3 +137,13 @@ def test_error_detail_falls_back_to_text_for_non_json():
     response = httpx.Response(502, text="Bad gateway", request=httpx.Request("GET", "http://x"))
     exc = httpx.HTTPStatusError("boom", request=response.request, response=response)
     assert api.error_detail(exc) == "Bad gateway"
+
+
+def test_no_pages_folder_next_to_entry_file():
+    # A `pages/` folder beside the entry file switches on Streamlit's legacy
+    # folder navigation on any run that hasn't called st.navigation yet (e.g.
+    # the first request after a restart), exposing every file by URL. Screens
+    # live in app/ui/views/ instead.
+    from pathlib import Path
+
+    assert not (Path(ENTRY).parent / "pages").exists()

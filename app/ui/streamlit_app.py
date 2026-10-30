@@ -1,4 +1,9 @@
-"""FeedMe UI entry point: the app shell around the pages in app/ui/pages/.
+"""FeedMe UI entry point: the app shell around the pages in app/ui/views/.
+
+The folder is deliberately not called `pages/`: a `pages/` folder next to this
+file switches on Streamlit's legacy folder-based navigation (a sidebar listing
+every file, each reachable by URL without going through this entry file) on
+any run that hasn't called st.navigation yet.
 
 Each run: page config, register the pages (Streamlit's own nav hidden), the
 login gate, then the shell (CSS, header, bottom tab bar) and the current page.
@@ -16,19 +21,16 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# Registered before the login gate, not after it, for two reasons:
-# - a deep link (e.g. /recipe?recipe=12) that hits the login screen is still the
-#   current page after logging in, instead of a "page not found";
-# - a `pages/` folder next to this file makes Streamlit fall back to its old
-#   folder-based navigation (a sidebar listing every file) on any run that never
-#   calls st.navigation - which would include every logged-out run.
+# Registered before the login gate, not after it, so a deep link (e.g.
+# /recipe?recipe=12) that hits the login screen is still the current page after
+# logging in, instead of a "page not found".
 page = st.navigation(
     [
-        st.Page("pages/recipes.py", title="Recipes", icon=":material/menu_book:", default=True),
-        st.Page("pages/pantry.py", title="Pantry", icon=":material/kitchen:"),
-        st.Page("pages/save.py", title="Save", icon=":material/add:"),
-        st.Page("pages/ask.py", title="Ask", icon=":material/chat:"),
-        st.Page("pages/recipe.py", title="Recipe", url_path="recipe"),
+        st.Page("views/recipes.py", title="Recipes", icon=":material/menu_book:", default=True),
+        st.Page("views/pantry.py", title="Pantry", icon=":material/kitchen:"),
+        st.Page("views/save.py", title="Save", icon=":material/add:"),
+        st.Page("views/ask.py", title="Ask", icon=":material/chat:"),
+        st.Page("views/recipe.py", title="Recipe", url_path="recipe"),
     ],
     position="hidden",
 )

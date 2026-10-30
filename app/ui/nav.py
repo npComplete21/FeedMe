@@ -13,12 +13,12 @@ from app.ui import auth
 # (page file relative to the entry file, label, icon), left to right. The Save
 # tab sits in the centre and is the emphasised one (see `.st-key-tab-save`).
 TABS = [
-    ("pages/recipes.py", "Recipes", ":material/menu_book:"),
-    ("pages/pantry.py", "Pantry", ":material/kitchen:"),
-    ("pages/save.py", "Save", ":material/add:"),
-    ("pages/ask.py", "Ask", ":material/chat:"),
+    ("views/recipes.py", "Recipes", ":material/menu_book:"),
+    ("views/pantry.py", "Pantry", ":material/kitchen:"),
+    ("views/save.py", "Save", ":material/add:"),
+    ("views/ask.py", "Ask", ":material/chat:"),
 ]
-SAVE_PAGE = "pages/save.py"
+SAVE_PAGE = "views/save.py"
 
 _LIGHT = {"bg": "#ffffff", "border": "rgba(49, 51, 63, 0.15)"}
 _DARK = {"bg": "#0e1117", "border": "rgba(250, 250, 250, 0.15)"}
@@ -137,4 +137,4 @@ def open_recipe(recipe_id: int) -> None:
     so only the query param would change.
     """
     st.session_state.open_recipe_id = recipe_id
-    st.switch_page("pages/recipe.py", query_params={"recipe": str(recipe_id)})
+    st.switch_page("views/recipe.py", query_params={"recipe": str(recipe_id)})
