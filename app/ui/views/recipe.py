@@ -8,17 +8,19 @@ unknown id shows "Recipe not found" with a way back, never a traceback.
 
 There is no single-recipe endpoint, so the recipe is found in `GET /recipes`.
 Editing is behind an Edit button; the flag is keyed per recipe id so opening
-another recipe doesn't inherit edit mode. Save is a full-replace PUT (ADR-0010).
+another recipe doesn't inherit edit mode, and `nav.open_recipe` drops it so
+reopening a recipe left mid-edit starts in read mode. Save is a full-replace PUT
+(ADR-0010). The back link returns to the list the user came from
+(`recipe_back_to`, set by `nav.open_recipe`), Recipes by default.
 """
 
 import httpx
 import streamlit as st
 
-from app.ui import api, components, logic
+from app.ui import api, components, logic, nav
 from app.ui.vocabulary import CUISINES, MEAL_TYPES
 
 PLATFORM_LABELS = {"youtube": "YouTube", "instagram": "Instagram", "website": "the website"}
-RECIPES_PAGE = "views/recipes.py"
 NONE_OPTION = "(none)"
 
 
@@ -40,7 +42,10 @@ def _select_index(options: list[str], current: str | None) -> int:
 
 
 def _back_link() -> None:
-    st.page_link(RECIPES_PAGE, label="← Back to recipes")
+    # Back to the list the user came from (nav.open_recipe records it); Recipes
+    # when nothing was recorded, e.g. after a refresh or from a shared link.
+    page, label = st.session_state.get("recipe_back_to", nav.BACK_TO_RECIPES)
+    st.page_link(page, label=label)
 
 
 def _not_found() -> None:

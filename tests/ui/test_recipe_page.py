@@ -227,6 +227,50 @@ def test_edit_mode_is_per_recipe(monkeypatch):
     assert at.button(key="edit-1") is not None
 
 
+def _open_from_recipes_list(monkeypatch):
+    """Start on the Recipes tab's All-recipes list, as a user would."""
+    client = _StubClient(RECIPES)
+    monkeypatch.setattr(api, "get_client", lambda: client)
+    at = AppTest.from_file(ENTRY)
+    at.session_state["access_token"] = "t"
+    at.session_state["user_email"] = "cook@example.com"
+    at.session_state["selected_cuisine"] = "__all__"
+    at.run()
+    assert not at.exception
+    return at, client
+
+
+def test_reopening_a_recipe_left_mid_edit_shows_the_read_view(monkeypatch):
+    at, _ = _open_from_recipes_list(monkeypatch)
+    at.button(key="recipe-row-list-2").click().run()
+    # AppTest renders a script's own st.switch_page in that run but goes back to
+    # its own current page on the next one, so stay on the recipe page here.
+    at.switch_page(PAGE)
+    at.button(key="edit-2").click().run()
+    assert at.text_input[0].value == "Carbonara"  # in the edit form
+
+    # Leave mid-edit for another tab, then open the same recipe again.
+    at.switch_page("views/recipes.py").run()
+    at.button(key="recipe-row-list-2").click().run()
+
+    assert not at.exception
+    assert len(at.text_input) == 0
+    assert len(at.text_area) == 0
+    assert at.button(key="edit-2") is not None
+    assert "Carbonara" in _text(at)
+
+
+def test_back_link_from_the_recipes_list_says_recipes(monkeypatch):
+    at, _ = _open_from_recipes_list(monkeypatch)
+    at.button(key="recipe-row-list-2").click().run()
+
+    assert not at.exception
+    back = [link for link in _links(at) if link.label.startswith("←")]
+    assert [link.label for link in back] == ["← Back to recipes"]
+    tab = next(link for link in _links(at) if link.label == "Recipes")
+    assert back[0].page_script_hash == tab.page_script_hash
+
+
 def test_save_sends_put_with_parsed_ingredients(monkeypatch):
     at, client = _open(monkeypatch, recipe_param="1")
     at.button(key="edit-1").click().run()

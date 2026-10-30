@@ -53,7 +53,7 @@ def _result(match: dict) -> None:
         # callback Streamlit turns the page switch into a no-op (see
         # nav.open_recipe).
         if st.button("Open recipe", key=f"pantry-open-{recipe['id']}", width="stretch"):
-            nav.open_recipe(recipe["id"])
+            nav.open_recipe(recipe["id"], back_to=nav.BACK_TO_PANTRY)
 
 
 st.session_state.setdefault("pantry_results", None)

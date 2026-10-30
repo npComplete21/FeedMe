@@ -148,6 +148,25 @@ def test_open_recipe_button_goes_to_the_recipe_page(monkeypatch):
     assert not at.exception
     assert at.session_state["open_recipe_id"] == 2
     assert at.query_params["recipe"] == ["2"]
+    # The recipe page actually ran (the stub library is empty, so: not found).
+    assert "Recipe not found." in [i.value for i in at.info]
+
+
+def test_back_link_from_a_pantry_result_returns_to_pantry(monkeypatch):
+    at, _ = _open(monkeypatch)
+    _find(at, "egg")
+    at.button(key="pantry-open-2").click().run()
+
+    links = [link.proto for link in at.get("page_link")]
+    back = [link for link in links if link.label.startswith("←")]
+    assert [link.label for link in back] == ["← Back to pantry"]
+    tab = next(link for link in links if link.label == "Pantry")
+    assert back[0].page_script_hash == tab.page_script_hash
+
+    # ...and following it lands on Pantry with the results still there.
+    at.switch_page(PAGE).run()
+    assert not at.exception
+    assert _keys(at, "pantry-open-") == ["pantry-open-1", "pantry-open-2"]
 
 
 def test_pantry_text_persists_in_session_state(monkeypatch):

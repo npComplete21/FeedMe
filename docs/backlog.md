@@ -40,8 +40,3 @@ bullet point six months from now).
   it (see [ADR-0032](adr/0032-mobile-first-ui-on-streamlit.md)). Consider a Playwright/browser smoke
   check of the bar at phone width, or an upper pin on `streamlit` in the `ui` extra. *Noted:
   2026-10-30, during Phase 5.*
-
-- [ ] **Leaving the recipe page mid-edit leaves the edit flag set.** The per-recipe edit flag is
-  never cleared when the user navigates away, so reopening that recipe in the same session lands in
-  edit mode again (nothing is lost and Cancel works, but it's odd). Fix: clear the flag in
-  `nav.open_recipe`. *Noted: 2026-10-30, during Phase 5.*

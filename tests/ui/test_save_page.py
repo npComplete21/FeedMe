@@ -218,6 +218,10 @@ def test_open_recipe_button_goes_to_the_recipe_page(monkeypatch):
     assert not at.exception
     assert at.session_state["open_recipe_id"] == 7
     assert at.query_params["recipe"] == ["7"]
+    # The recipe page actually ran (the stub library is empty, so: not found),
+    # and its back link goes to Recipes, where the new recipe is listed.
+    assert "Recipe not found." in [i.value for i in at.info]
+    assert "← Back to recipes" in [link.proto.label for link in at.get("page_link")]
 
 
 def test_title_is_escaped_in_the_success_message(monkeypatch):

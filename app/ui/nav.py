@@ -163,17 +163,32 @@ def render_tab_bar() -> None:
                 st.page_link(page, label=label, icon=icon)
 
 
-def open_recipe(recipe_id: int) -> None:
+RECIPE_PAGE = "views/recipe.py"
+
+# Where the recipe page's back link goes: (page, label). The recipe page falls
+# back to Recipes when nothing was recorded (a refresh or a shared link).
+BACK_TO_RECIPES = ("views/recipes.py", "← Back to recipes")
+BACK_TO_PANTRY = ("views/pantry.py", "← Back to pantry")
+
+
+def open_recipe(recipe_id: int, back_to: tuple[str, str] = BACK_TO_RECIPES) -> None:
     """Go to the recipe page for `recipe_id`.
 
     The id goes in session state for the page to read, and in the URL as
     `?recipe=<id>` so a refresh or a shared link reopens the same recipe -
     `st.switch_page` clears every query param it isn't given.
 
+    `back_to` is the list the user came from (`BACK_TO_RECIPES` or
+    `BACK_TO_PANTRY`), which the page's back link returns to. Opening a recipe
+    always starts in read mode: an edit left half-done on an earlier visit is
+    dropped.
+
     Call it from the script body (`if st.button(...): nav.open_recipe(id)`),
     never as a widget's `on_click`: inside a callback Streamlit turns the page
     switch into a no-op ("Calling st.rerun() within a callback is a no-op"),
     so only the query param would change.
     """
+    st.session_state.pop(f"editing-{recipe_id}", None)
+    st.session_state.recipe_back_to = back_to
     st.session_state.open_recipe_id = recipe_id
-    st.switch_page("views/recipe.py", query_params={"recipe": str(recipe_id)})
+    st.switch_page(RECIPE_PAGE, query_params={"recipe": str(recipe_id)})
