@@ -163,13 +163,17 @@ Goal: replace the single-scroll Streamlit script with a phone-first app — four
 - [x] 5.5 Pantry tab — "what can I make?", remembered for the session
 - [x] 5.6 Ask tab — the chat, clear of the tab bar
 - [x] 5.7 Cleanup + docs — remove what's left of the old script, ADR-0032
-  ([mobile-first UI on Streamlit](adr/0032-mobile-first-ui-on-streamlit.md)), full live pass
+  ([mobile-first UI on Streamlit](adr/0032-mobile-first-ui-on-streamlit.md)), live pass (phone
+  width; see caveats)
 
-**Phase 5 complete.** The UI is four bottom tabs plus a recipe page, with no backend change. Verified
-live at 375px against the dev API: log in, save a YouTube Short link with pasted text, open it, rate
-it, search for it, Pantry, Ask; tablet and desktop widths glanced at, nothing broken. The built `ui`
-image starts cleanly and renders the login page (it resolved Streamlit 1.66.1, newer than the 1.59.2
-everything was tested on). Not verified: a phone with a real bottom safe-area inset, light theme
+**Phase 5 complete, with the caveats below.** The UI is four bottom tabs plus a recipe page, with no
+backend change. Verified live at 375px against the dev API: log in, save a YouTube Short link with
+pasted text, open it, rate it, search for it, Pantry, Ask; tablet and desktop widths glanced at,
+nothing broken. The built `ui` image starts cleanly and renders the login page; it had resolved
+Streamlit 1.66.1, so the `ui` extra is now pinned to the tested `>=1.59.2,<1.60` (see ADR-0032).
+A final review's fix wave then cleared the previous user's state on log out, kept a Save in
+progress across a tab switch (with a two-minute cap), and made Back return to Pantry when that is
+where the recipe was opened from; each was checked live at 375px. Not verified: a phone with a real bottom safe-area inset, light theme
 (only dark was seen), the Instagram/website save paths in the browser (covered by unit tests only),
 and the full `docker compose up` stack (host ports were taken by the dev stack). Follow-ups are in
 the [backlog](backlog.md). Not tagged or released.

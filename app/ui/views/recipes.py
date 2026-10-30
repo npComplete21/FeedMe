@@ -155,7 +155,7 @@ if searching:
         st.caption(_plural(len(results)))
         _rows(results, "search")
     else:
-        st.info(f"No recipes match “{query.strip()}”")
+        st.info(f"No recipes match “{components.md_escape(query.strip())}”")
 elif selected is None:
     _cuisine_boxes(all_recipes)
 else:

@@ -28,9 +28,9 @@ to four. There is no Plan tab until a meal planner exists: a dead tab was an exp
 **Stay on Streamlit; no PWA or real frontend yet.** Everything the redesign needs is reachable from
 Streamlit with CSS, and the app stays one Python toolchain. This narrows ADR-0004's revisit note
 rather than overturning it: the trigger is now **the PWA / share-sheet work** (the roadmap's
-"faster link capture" item). A share-sheet target needs a web app manifest and a service worker,
-which Streamlit cannot serve; that is the point to build a real frontend (or a thin PWA shell), not
-before.
+"faster link capture" item). A share-sheet target needs an installable web app (a manifest, and in
+practice a service worker) served at the origin root, which Streamlit does not offer; that is the
+point to build a real frontend (or a thin PWA shell), not before.
 
 **Pages in `app/ui/views/`, not `pages/`.** The entry file `streamlit_app.py` does page config,
 `st.navigation`, the login gate and the shell; one file per screen lives in `app/ui/views/`

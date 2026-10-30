@@ -168,6 +168,14 @@ def test_search_no_match_shows_empty_state(monkeypatch):
     assert _keys(at, "cuisine-box-") == []
 
 
+def test_no_match_message_escapes_the_query(monkeypatch):
+    at, _ = _open(monkeypatch)
+
+    _search(at, "*zz* [q]")
+
+    assert r"No recipes match “\*zz\* \[q\]”" in _text(at)
+
+
 def test_empty_library_message(monkeypatch):
     at, _ = _open(monkeypatch, recipes=[])
 

@@ -144,11 +144,11 @@ Streamlit UI (`app/ui`) as separate processes talking over HTTP — the UI is de
 client with no direct imports of backend code (see ADR-0004). The UI is phone-first (ADR-0032): a thin
 entry file (`app/ui/streamlit_app.py`: page config, hidden `st.navigation`, login gate, shell) plus one
 file per screen in `app/ui/views/` (Recipes, Pantry, Save, Ask, and the `?recipe=<id>` recipe page),
-joined by a fixed bottom tab bar drawn in `app/ui/nav.py`; never name that folder `pages/`. Recipe ingestion runs on a separate
-Celery worker (`app/worker.py`), not the request thread — `POST /recipes/ingest` enqueues a task via
-Redis and returns immediately; the UI polls `GET /recipes/ingest/{task_id}` until it resolves (see
-ADR-0013). API, UI, and worker are each Dockerized as separate images (`docker/*.Dockerfile`, see
-ADR-0012/0013), wired together with Postgres and Redis in `docker-compose.yml`. `app/models.py` +
-Alembic migrations define the schema; migrations run automatically in the `api` container's
-entrypoint before it starts serving — the `worker` container deliberately does not also run them,
-to keep a single owner of schema changes.
+joined by a fixed bottom tab bar drawn in `app/ui/nav.py`; never name that folder `pages/`. Recipe
+ingestion runs on a separate Celery worker (`app/worker.py`), not the request thread —
+`POST /recipes/ingest` enqueues a task via Redis and returns immediately; the UI polls
+`GET /recipes/ingest/{task_id}` until it resolves (see ADR-0013). API, UI, and worker are each
+Dockerized as separate images (`docker/*.Dockerfile`, see ADR-0012/0013), wired together with
+Postgres and Redis in `docker-compose.yml`. `app/models.py` + Alembic migrations define the schema;
+migrations run automatically in the `api` container's entrypoint before it starts serving — the
+`worker` container deliberately does not also run them, to keep a single owner of schema changes.

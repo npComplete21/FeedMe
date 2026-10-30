@@ -10,8 +10,8 @@ Session keys, both plain so they outlive the tab being left:
 - `chat_display`: `[(role, text)]` for rendering. A failed request still adds
   the user's question here (so it stays on screen), but not to `chat_history`.
 
-The chat input sits above the fixed tab bar via the `stBottom` rule in
-`app.ui.nav`; AppTest can't see CSS, so that is checked live.
+The chat input sits above the fixed tab bar via the `stBottomBlockContainer`
+rule in `app.ui.nav`; AppTest can't see CSS, so that is checked live.
 """
 
 import httpx
