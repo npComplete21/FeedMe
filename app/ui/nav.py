@@ -28,9 +28,25 @@ _CSS = """
 /* Streamlit's own chrome (toolbar, deploy button, running indicator). */
 header[data-testid="stHeader"] {{ display: none; }}
 
+/* The tab bar's height - a floor it is guaranteed to reach (see .st-key-tab-bar
+   below), so everything that must clear the bar can be sized from one value. */
+:root {{
+  --feedme-tab-bar-h: calc(3.25rem + env(safe-area-inset-bottom));
+}}
+
 /* Room at the bottom so the fixed tab bar never covers the last item. */
 [data-testid="stMainBlockContainer"] {{
-  padding: 0.75rem 1rem calc(6rem + env(safe-area-inset-bottom));
+  padding: 0.75rem 1rem calc(var(--feedme-tab-bar-h) + 2.25rem);
+}}
+
+/* Ask tab: Streamlit pins st.chat_input to the bottom of the viewport inside
+   `stBottom` > `stBottomBlockContainer`. Its own bottom padding is a fixed 3.5rem
+   that knows nothing about our bar, so the input only cleared the bar by luck
+   (and would slide under it on a phone with a home-indicator inset). Pad it by
+   the bar's height instead. NOTE: `stBottomBlockContainer` is a Streamlit
+   internal test id, not a public API - re-check this rule on Streamlit upgrades. */
+[data-testid="stBottomBlockContainer"] {{
+  padding-bottom: calc(var(--feedme-tab-bar-h) + 0.5rem);
 }}
 
 /* Comfortable tap targets. */
@@ -71,6 +87,8 @@ header[data-testid="stHeader"] {{ display: none; }}
   right: 0;
   bottom: 0;
   z-index: 1000;
+  box-sizing: border-box;
+  min-height: var(--feedme-tab-bar-h);
   background: {bg};
   border-top: 1px solid {border};
   padding: 0.25rem 0.5rem calc(0.25rem + env(safe-area-inset-bottom));
