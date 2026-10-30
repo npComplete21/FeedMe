@@ -146,6 +146,23 @@ deployed by tagging a release, with nightly off-node backups and a tested restor
 - [ ] Weekly meal-plan generator from pantry + recipe list
 - [ ] Monitoring — CloudWatch or in-cluster Prometheus/Grafana, cost alerts
 
+## Phase 5 — Mobile-first UI
+
+Goal: replace the single-scroll Streamlit script with a phone-first app — four bottom tabs
+(Recipes, Pantry, ＋ Save, Ask) plus a recipe page — with no backend change (see the
+[design](superpowers/specs/2026-10-29-mobile-first-ui-design.md) and
+[plan](superpowers/plans/2026-10-29-mobile-first-ui.md)).
+
+- [x] 5.1 Shell — thin entry file, hidden `st.navigation`, fixed bottom tab bar, account popover,
+  mobile CSS; auth/cookie code moved to `app/ui/auth.py`, the API client and global 401 handler to
+  `app/ui/api.py`. Pages are stubs until 5.2–5.6. Verified live at phone width.
+- [ ] 5.2 Recipes tab — search bar, cuisine boxes, lists ordered by rating
+- [ ] 5.3 Recipe page — read, rate, edit behind a button, addressed by `?recipe=<id>`
+- [ ] 5.4 Save (＋) — paste a link, platform detected from the URL, paste-text fallback kept
+- [ ] 5.5 Pantry tab — "what can I make?", remembered for the session
+- [ ] 5.6 Ask tab — the chat, clear of the tab bar
+- [ ] 5.7 Cleanup + docs — remove what's left of the old script, ADR-0032, full live pass
+
 ---
 
 ## Testing approach (applies across every phase)
