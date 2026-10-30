@@ -162,7 +162,17 @@ Goal: replace the single-scroll Streamlit script with a phone-first app — four
 - [x] 5.4 Save (＋) — paste a link, platform detected from the URL, paste-text fallback kept
 - [x] 5.5 Pantry tab — "what can I make?", remembered for the session
 - [x] 5.6 Ask tab — the chat, clear of the tab bar
-- [ ] 5.7 Cleanup + docs — remove what's left of the old script, ADR-0032, full live pass
+- [x] 5.7 Cleanup + docs — remove what's left of the old script, ADR-0032
+  ([mobile-first UI on Streamlit](adr/0032-mobile-first-ui-on-streamlit.md)), full live pass
+
+**Phase 5 complete.** The UI is four bottom tabs plus a recipe page, with no backend change. Verified
+live at 375px against the dev API: log in, save a YouTube Short link with pasted text, open it, rate
+it, search for it, Pantry, Ask; tablet and desktop widths glanced at, nothing broken. The built `ui`
+image starts cleanly and renders the login page (it resolved Streamlit 1.66.1, newer than the 1.59.2
+everything was tested on). Not verified: a phone with a real bottom safe-area inset, light theme
+(only dark was seen), the Instagram/website save paths in the browser (covered by unit tests only),
+and the full `docker compose up` stack (host ports were taken by the dev stack). Follow-ups are in
+the [backlog](backlog.md). Not tagged or released.
 
 ---
 
