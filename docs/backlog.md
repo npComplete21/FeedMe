@@ -39,6 +39,9 @@ bullet point six months from now).
 - [ ] **The tab-bar CSS depends on Streamlit internal test ids.** `app/ui/nav.py` targets
   `stHeader`, `stMainBlockContainer`, `stBottomBlockContainer`, `stPageLink-NavLink` and others, which
   are not a public API and can be renamed by an upgrade; `AppTest` cannot see CSS so nothing catches
-  it (see [ADR-0032](adr/0032-mobile-first-ui-on-streamlit.md)). Consider a Playwright/browser smoke
-  check of the bar at phone width, or an upper pin on `streamlit` in the `ui` extra. *Noted:
-  2026-10-30, during Phase 5.*
+  it (see [ADR-0032](adr/0032-mobile-first-ui-on-streamlit.md)). For now the `ui` extra is pinned to
+  the tested range, `streamlit>=1.59.2,<1.60` (unpinned, the image resolved 1.66.1 on 2026-10-30,
+  where only the login page and the Recipes tab were eyeballed), so an upgrade is a deliberate pin
+  bump plus the live phone-width check. Still worth having: a Playwright/browser smoke check of the
+  bar, the Ask input and the recipe rows at phone width, so bumping the pin isn't a manual pass.
+  *Noted: 2026-10-30, during Phase 5.*

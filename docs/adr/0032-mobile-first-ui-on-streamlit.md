@@ -82,9 +82,12 @@ recipes are opened.
   `stIconMaterial` (the ＋ circle), `stMarkdown`, `stElementContainer`, `stPopover`, and
   `stMarkdownContainer` inside recipe-row buttons, plus the `.st-key-<name>` classes from keyed
   containers. A Streamlit upgrade can rename any of them. **Re-check the bar, the Ask input and the
-  recipe rows in a browser at phone width after every Streamlit upgrade.** The `ui` extra now
-  requires `streamlit>=1.59` (everything was verified on 1.59.2); `AppTest` cannot see CSS, so
-  nothing automated catches a break. A smoke check or an upper pin is in the backlog.
+  recipe rows in a browser at phone width after every Streamlit upgrade.** `AppTest` cannot see
+  CSS, so nothing automated catches a break; instead the `ui` extra is pinned to the tested range,
+  `streamlit>=1.59.2,<1.60` (everything was verified on 1.59.2), and raising that pin is the
+  upgrade that needs the live check. Unpinned, the image had resolved 1.66.1 on 2026-10-30, where
+  only the login page and the Recipes tab were eyeballed. A browser smoke check that would let the
+  pin move more freely is in the backlog.
 - Cost: the bar's colours are hard-coded for light and dark (picked from `st.context.theme.type`),
   because Streamlit exposes no public CSS variables, and the page icons/titles are listed twice
   (the `st.Page` list and `nav.TABS`). Renaming a tab means editing both.
