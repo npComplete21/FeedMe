@@ -1,6 +1,6 @@
 """Pure helpers for the Streamlit UI: no Streamlit import, no I/O.
 
-Kept out of streamlit_app.py so the rules worth testing (what counts as a link,
+Kept out of the Streamlit pages so the rules worth testing (what counts as a link,
 which platform a URL belongs to, how the recipe search matches, how ingredient
 text round-trips) run under plain pytest without a Streamlit runtime. Like
 vocabulary.py, this module is deliberately free of backend imports: the UI is a

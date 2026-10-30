@@ -1,6 +1,8 @@
 # ADR 0004: Streamlit for the Phase 0 UI
 
-Status: Accepted
+Status: Accepted, superseded in part by [ADR-0032](0032-mobile-first-ui-on-streamlit.md) — Phase 5 reshaped
+the UI for phones and deliberately stayed on Streamlit; the "replace it around Phase 3–4" note below now
+waits on the PWA / share-sheet work instead. The reasoning here for starting on Streamlit still stands.
 
 ## Context
 

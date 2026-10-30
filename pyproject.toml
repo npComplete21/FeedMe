@@ -30,8 +30,10 @@ api = [
     "pyjwt>=2.9",
 ]
 ui = [
-    # st.feedback(default=...) for star ratings needs a recent release.
-    "streamlit>=1.50",
+    # st.feedback(default=...) for star ratings needs a recent release, and the
+    # mobile-first UI (ADR-0032) uses horizontal st.container(key=...), st.navigation
+    # position="hidden" and st.context.theme; it was built and verified on 1.59.2.
+    "streamlit>=1.59",
     "httpx>=0.27",
 ]
 dev = [
