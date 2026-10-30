@@ -24,7 +24,8 @@ def normalize_url(raw: str) -> str | None:
 
     A scheme-less paste like "youtu.be/abc" gets `https://` prepended. Anything
     blank, containing inner whitespace, or without a dot-containing host
-    ("chicken curry", "hello") is rejected so free text isn't sent for ingestion.
+    ("chicken curry", "hello") is rejected so free text isn't sent for ingestion,
+    and so is any scheme other than http/https ("ftp://a.com", "file://x.y/z").
     """
     url = raw.strip()
     if not url or any(ch.isspace() for ch in url):
@@ -32,8 +33,11 @@ def normalize_url(raw: str) -> str | None:
     if not _SCHEME_RE.match(url):
         url = f"https://{url}"
     try:
-        host = urlsplit(url).hostname
+        parts = urlsplit(url)
+        host = parts.hostname
     except ValueError:
+        return None
+    if parts.scheme.lower() not in ("http", "https"):
         return None
     if not host or "." not in host:
         return None

@@ -159,7 +159,7 @@ Goal: replace the single-scroll Streamlit script with a phone-first app — four
   Streamlit's legacy folder navigation) and are stubs until 5.2–5.6. Verified live at phone width.
 - [x] 5.2 Recipes tab — search bar, cuisine boxes, lists ordered by rating
 - [x] 5.3 Recipe page — read, rate, edit behind a button, addressed by `?recipe=<id>`
-- [ ] 5.4 Save (＋) — paste a link, platform detected from the URL, paste-text fallback kept
+- [x] 5.4 Save (＋) — paste a link, platform detected from the URL, paste-text fallback kept
 - [ ] 5.5 Pantry tab — "what can I make?", remembered for the session
 - [ ] 5.6 Ask tab — the chat, clear of the tab bar
 - [ ] 5.7 Cleanup + docs — remove what's left of the old script, ADR-0032, full live pass

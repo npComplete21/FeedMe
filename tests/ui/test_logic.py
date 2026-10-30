@@ -44,6 +44,15 @@ def test_normalize_url_rejects_non_links():
         assert normalize_url(raw) is None
 
 
+def test_normalize_url_rejects_schemes_other_than_http_and_https():
+    for raw in ["ftp://a.com", "file://x.y/z", "javascript://a.b/%0Aalert(1)", "mailto://a.com"]:
+        assert normalize_url(raw) is None
+
+
+def test_normalize_url_scheme_check_is_case_insensitive():
+    assert normalize_url("HTTPS://Example.com/r") == "HTTPS://Example.com/r"
+
+
 RECIPES = [
     {"title": "Chicken Curry", "ingredients": [{"name": "Chicken"}, {"name": "Coconut milk"}]},
     {"title": "Pasta", "ingredients": [{"name": "Spaghetti"}, {"name": "Garlic"}]},
