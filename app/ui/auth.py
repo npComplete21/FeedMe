@@ -17,6 +17,16 @@ from app.ui import api
 # to write one, so writes go through a tiny script on the next page render.
 TOKEN_COOKIE = "feedme_token"
 
+# The only session keys that survive a log out or a log in: the login itself.
+# Everything else (chat history, pantry results, the Save fields, the open
+# recipe, edit flags, search and sort, every widget's state) belongs to whoever
+# was logged in and is deleted, so the next user in this tab starts clean - in
+# particular the chat's provider history, which would otherwise be sent to /chat
+# as the next user's own.
+_KEEP_ACROSS_USERS = frozenset(
+    {"access_token", "user_email", "ignore_remembered_token", "pending_cookie_script"}
+)
+
 
 def _init_state() -> None:
     if "access_token" not in st.session_state:
@@ -53,7 +63,20 @@ def _cookie_script(value: str, max_age: int) -> str:
     )
 
 
+def _clear_user_state() -> None:
+    """Delete every session key except the login itself (`_KEEP_ACROSS_USERS`).
+
+    Safe from a callback and before `st.rerun()`, which is where it runs.
+    """
+    for key in list(st.session_state.keys()):
+        if key not in _KEEP_ACROSS_USERS:
+            del st.session_state[key]
+
+
 def _log_in(token: str, email: str) -> None:
+    # Normally already clean (log_out cleared it), but a login must never
+    # inherit whatever a previous user left behind.
+    _clear_user_state()
     st.session_state.access_token = token
     st.session_state.user_email = email
     st.session_state.ignore_remembered_token = False
@@ -61,7 +84,13 @@ def _log_in(token: str, email: str) -> None:
 
 
 def log_out() -> None:
+    """Forget the user: every trace of them in this session, and the cookie.
+
+    Used by the Log out button (a callback), the global 401 hook in `api` and an
+    expired remembered cookie.
+    """
     _init_state()
+    _clear_user_state()
     st.session_state.access_token = None
     st.session_state.user_email = None
     st.session_state.ignore_remembered_token = True
@@ -83,6 +112,7 @@ def _restore_remembered_login() -> None:
     except httpx.HTTPError:
         return  # API unreachable - show the login screen, keep the cookie for next time
     if response.status_code == 200:
+        _clear_user_state()  # same rule as a fresh login: start clean
         st.session_state.access_token = token
         st.session_state.user_email = response.json()["email"]
     elif response.status_code == 401:
