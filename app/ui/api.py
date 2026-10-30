@@ -6,6 +6,7 @@ only talks to the API over HTTP (ADR-0004).
 """
 
 import os
+import time
 
 import httpx
 import streamlit as st
@@ -14,6 +15,23 @@ from dotenv import load_dotenv
 load_dotenv()
 
 API_BASE_URL = os.environ.get("FEEDME_API_URL", "http://localhost:8000")
+
+# Polling an ingest task (the Save tab, ADR-0013): one GET every couple of
+# seconds, giving up after two minutes. Celery reports a lost or expired task as
+# PENDING forever, so without a deadline a dead worker means an endless spinner.
+INGEST_POLL_SECONDS = 2
+INGEST_DEADLINE_SECONDS = 120
+
+
+def now() -> float:
+    """The clock the ingest deadline is measured on. Tests monkeypatch it."""
+    return time.monotonic()
+
+
+def sleep(seconds: float) -> None:
+    """The wait between ingest polls. Tests monkeypatch it (rather than
+    `time.sleep` itself, which AppTest's own wait loop uses)."""
+    time.sleep(seconds)
 
 
 def error_detail(exc: httpx.HTTPStatusError) -> str:

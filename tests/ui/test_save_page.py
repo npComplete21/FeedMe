@@ -6,8 +6,6 @@ sees elements and session state but not CSS or a real worker, so layout and the
 real ingest are checked live instead.
 """
 
-import time
-
 import httpx
 import pytest
 from streamlit.testing.v1 import AppTest
@@ -51,7 +49,10 @@ class _StubClient:
 
 @pytest.fixture(autouse=True)
 def _no_sleep(monkeypatch):
-    monkeypatch.setattr(time, "sleep", lambda seconds: None)
+    # The page's own wait, not time.sleep: AppTest's wait loop uses time.sleep,
+    # and making that a no-op turns it into a busy loop that starves the script
+    # thread (seen as a spurious "script run timed out").
+    monkeypatch.setattr(api, "sleep", lambda seconds: None)
 
 
 def _open(monkeypatch, client=None, **session):
@@ -302,6 +303,139 @@ def test_saved_result_survives_switching_tabs_and_back(monkeypatch):
 
     assert "Added: Carbonara" in _text(at)
     assert at.button(key="save-open-recipe").label == "Open recipe"
+
+
+class _InterruptingClient(_StubClient):
+    """The first poll ends the run, the way a tap elsewhere does mid-poll.
+
+    (Streamlit acts on a tap at the next st call, by abandoning the run; here
+    st.stop() abandons it at the same point.) Later polls answer normally.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.interrupted = False
+
+    def get(self, url, **kwargs):
+        if url.startswith("/recipes/ingest/") and not self.interrupted:
+            import streamlit as st
+
+            self.interrupted = True
+            st.stop()
+        return super().get(url, **kwargs)
+
+
+PENDING_TASK = {
+    "task_id": "t1", "platform": "youtube", "url": SHORT_FULL, "pasted": False, "started": 0.0,
+}
+
+
+def test_polling_resumes_after_an_interrupted_run_without_a_second_post(monkeypatch):
+    at, client = _open(monkeypatch, _InterruptingClient())
+    _type(at, SHORT)
+    _save(at)  # POSTs, then the run is abandoned mid-poll
+    assert len(client.posts) == 1
+    assert not at.success
+
+    # Away to another tab and back: the task is picked up again, not lost.
+    at.switch_page(OTHER_PAGE).run()
+    at.switch_page(PAGE).run()
+
+    assert not at.exception
+    assert len(client.posts) == 1
+    assert "Added: Carbonara" in _text(at)
+    assert at.session_state["save_task"] is None
+
+
+def test_a_second_tap_while_polling_does_not_post_again(monkeypatch):
+    at, client = _open(monkeypatch, _InterruptingClient())
+    _type(at, SHORT)
+    _save(at)  # abandoned mid-poll
+
+    # The tap that interrupted the run was on Save itself: its trigger arrives
+    # with the next run.
+    _save(at)
+
+    assert len(client.posts) == 1
+    assert "Added: Carbonara" in _text(at)
+
+
+def test_save_is_disabled_while_a_task_is_pending(monkeypatch):
+    at, client = _open(monkeypatch, _InterruptingClient(), save_task=PENDING_TASK, save_url=SHORT)
+
+    assert at.button(key="save-submit").disabled
+    assert client.posts == []
+    assert len(client.gets) == 0  # the stub's first poll ended the run
+
+
+def test_polling_gives_up_after_the_deadline(monkeypatch):
+    clock = {"now": 0.0}
+    monkeypatch.setattr(api, "now", lambda: clock["now"])
+    monkeypatch.setattr(api, "sleep", lambda s: clock.__setitem__("now", clock["now"] + s))
+
+    class _NeverDone(_StubClient):
+        def get(self, url, **kwargs):
+            # Guard so that a loop with no deadline fails here instead of hanging.
+            assert len(self.gets) < 500, "polled forever"
+            return super().get(url, **kwargs)
+
+    at, client = _open(monkeypatch, _NeverDone(polls=[{"state": "pending"}]))
+    _type(at, SHORT)
+    _save(at)
+
+    assert "Still working" in _text(at)
+    assert "Recipes tab" in _text(at)
+    assert not at.success
+    assert at.session_state["save_task"] is None
+    assert not at.button(key="save-submit").disabled
+    # About two minutes of 2-second polls, not one more.
+    assert 50 <= len(client.gets) <= 70
+
+
+def test_typing_a_new_link_clears_the_previous_result(monkeypatch):
+    at, _ = _open(monkeypatch)
+    _type(at, SHORT)
+    _save(at)
+    assert "Added: Carbonara" in _text(at)
+
+    _type(at, "https://www.instagram.com/reel/abc/")
+
+    assert not at.success
+    assert "save-open-recipe" not in [b.key for b in at.button]
+
+
+def test_opening_the_saved_recipe_clears_the_result(monkeypatch):
+    at, _ = _open(monkeypatch)
+    _type(at, SHORT)
+    _save(at)
+
+    at.button(key="save-open-recipe").click().run()
+
+    assert not at.exception
+    assert "Recipe not found." in [i.value for i in at.info]  # on the recipe page
+    # Gone, so coming back to Save doesn't show the old banner. (Asserted on
+    # state: after a script's own st.switch_page, AppTest's element tree keeps
+    # stale Save widgets and can't be driven back to Save.)
+    assert at.session_state["save_result"] is None
+
+
+def test_worker_error_is_escaped(monkeypatch):
+    client = _StubClient(polls=[{"state": "failure", "error": "*bad* [x]"}])
+    at, _ = _open(monkeypatch, client)
+
+    _type(at, SHORT)
+    _paste(at, "some words")
+    _save(at)
+
+    assert r"\*bad\* \[x\]" in _text(at)
+    assert "*bad* [x]" not in _text(at)
+
+
+def test_fetch_failure_reason_is_escaped(monkeypatch):
+    failure = {"platform": "youtube", "url": SHORT_FULL, "error": "*bad* [x]"}
+    at, _ = _open(monkeypatch, fetch_failure=failure, save_url=SHORT)
+
+    assert r"\*bad\* \[x\]" in _text(at)
 
 
 def test_api_error_on_submit_is_reported_inline(monkeypatch):

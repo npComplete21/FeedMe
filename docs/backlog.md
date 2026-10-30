@@ -21,11 +21,13 @@ bullet point six months from now).
   step-by-step [runbook](runbooks/postgres-own-block-volume.md), needs OCI console + node access to run.
   *Noted: 2026-09-27, during Phase 3.9.*
 
-- [ ] **Save page: the ingest poll loop has no timeout.** `app/ui/views/save.py` polls
-  `GET /recipes/ingest/{task_id}` until it resolves, and Celery reports a lost or expired task as
-  `PENDING` forever, so if the worker is down a phone user waits indefinitely on a spinner. Needs an
-  overall cap (a minute or two) and a "taking longer than expected - try again or paste the text"
-  message. *Noted: 2026-10-30, during Phase 5.*
+- [ ] **`POST /recipes/ingest` doesn't dedupe.** The Save page now remembers the task it is
+  polling, disables Save until it resolves, and gives up after two minutes with "still working -
+  check the Recipes tab" (fixed 2026-10-30; the poll loop used to have no timeout, and a tap
+  mid-poll could lose the result or post twice). What remains: after that deadline the worker may
+  still finish, and a user who taps Save again on the same link gets a second copy of the recipe.
+  A server-side guard (same user + same URL within a few minutes returns the existing task or
+  recipe) would close it. *Noted: 2026-10-30, during Phase 5.*
 
 - [ ] **Pantry: Enter doesn't search, and "No matches." is unreachable.** The ingredient box is a
   plain `st.text_input`, so pressing Enter only commits the value - the user has to tap Find recipes;
